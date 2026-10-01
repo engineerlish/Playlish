@@ -44,6 +44,19 @@ npm run build
 npm start
 ```
 
+Checks to run before opening a pull request:
+
+| Command | What it does |
+|---|---|
+| `npm run typecheck` | Type-checks the main process, renderer and tests |
+| `npm run lint` | ESLint with type-aware rules |
+| `npm test` | Unit and integration tests (Vitest) |
+| `npm run test:coverage` | Same, with a coverage report in `coverage/` |
+| `npm run audit:deps` | Dependency vulnerability check |
+| `npm run check` | Typecheck, lint and tests together |
+
+Tests live in `tests/`. Spotify is never called from tests: use the fake server in `tests/helpers/fake-spotify.ts`. Add a line to `CHANGELOG.md` under "Unreleased" for every user-visible change.
+
 Playback needs a Spotify Premium account, your own Client ID from the Spotify Developer Dashboard, and a VMP-signed castLabs Electron build. See `README-SPIKE.md` for the current setup steps.
 
 ## Plugins
