@@ -1,4 +1,5 @@
 import type { HostApi, PlaybackState, PlayerCommand } from '../shared/types';
+import { FadeController, VolumeRamper } from './fade.js';
 
 /* Minimal typings for the parts of the Spotify Web Playback SDK used here (avoids an extra @types dependency). */
 interface SpotifyTrack {
@@ -42,13 +43,11 @@ declare global {
 const DEVICE_NAME = 'Playlish (spike)';
 // CHANGE HERE: starting volume (0..1).
 const INITIAL_VOLUME = 0.5;
-// CHANGE HERE: fade duration for the fade-pause/fade-resume test, and the time between volume steps.
-const FADE_MS = 800;
-const RAMP_STEP_MS = 25;
 
 let player: SpotifyPlayer;
+let ramper: VolumeRamper;
+let fader: FadeController;
 let baseVolume = INITIAL_VOLUME;
-let rampId = 0;
 let lastState: SpotifySdkState | null = null;
 
 /** Registers an SDK event listener with a typed payload. */
@@ -76,43 +75,6 @@ function reportState(): void {
   window.host.state(toPlaybackState(lastState));
 }
 
-/** Linearly ramps the SDK volume from one value to another; a newer ramp or volume change cancels this one. */
-function ramp(from: number, to: number, durationMs: number): Promise<void> {
-  const id = ++rampId;
-  const steps = Math.max(1, Math.round(durationMs / RAMP_STEP_MS));
-  return new Promise((resolve) => {
-    let step = 0;
-    const timer = setInterval(() => {
-      if (id !== rampId) {
-        clearInterval(timer);
-        resolve();
-        return;
-      }
-      step++;
-      void player.setVolume(Math.min(1, Math.max(0, from + (to - from) * (step / steps))));
-      if (step >= steps) {
-        clearInterval(timer);
-        resolve();
-      }
-    }, RAMP_STEP_MS);
-  });
-}
-
-/** Pauses with a fade-out, or resumes with a fade-in, using volume ramps (the only fade method the SDK allows). */
-async function fadeToggle(): Promise<void> {
-  const state = await player.getCurrentState();
-  if (!state) return;
-  if (!state.paused) {
-    await ramp(baseVolume, 0, FADE_MS);
-    await player.pause();
-    await player.setVolume(baseVolume);
-  } else {
-    await player.setVolume(0);
-    await player.resume();
-    await ramp(0, baseVolume, FADE_MS);
-  }
-}
-
 /** Executes a command from the main process. */
 function handleCommand(command: PlayerCommand): void {
   switch (command.type) {
@@ -120,7 +82,7 @@ function handleCommand(command: PlayerCommand): void {
       void player.togglePlay();
       break;
     case 'fadeToggle':
-      void fadeToggle();
+      void fader.toggle();
       break;
     case 'next':
       void player.nextTrack();
@@ -129,7 +91,7 @@ function handleCommand(command: PlayerCommand): void {
       void player.previousTrack();
       break;
     case 'volume':
-      rampId++; // cancel any running fade
+      ramper.cancel(); // the user's volume change wins over a running fade
       baseVolume = Math.min(1, Math.max(0, command.value));
       void player.setVolume(baseVolume).then(reportState);
       break;
@@ -145,6 +107,9 @@ function startPlayer(): void {
       window.host.getToken().then(callback, (err: Error) => window.host.error('token', err.message));
     },
   });
+
+  ramper = new VolumeRamper(player, undefined, undefined, (err) => window.host.error('volume', String(err)));
+  fader = new FadeController(player, ramper, () => baseVolume);
 
   on<{ device_id: string }>('ready', ({ device_id }) => window.host.ready(device_id));
   on<{ device_id: string }>('not_ready', () => window.host.error('not_ready', 'The player went offline.'));

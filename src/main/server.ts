@@ -6,6 +6,7 @@ import * as path from 'node:path';
 const STATIC_FILES: Record<string, string> = {
   '/host.html': 'text/html; charset=utf-8',
   '/host.js': 'text/javascript; charset=utf-8',
+  '/fade.js': 'text/javascript; charset=utf-8',
   '/ui.html': 'text/html; charset=utf-8',
   '/ui.js': 'text/javascript; charset=utf-8',
 };

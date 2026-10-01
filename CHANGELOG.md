@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project are documented in this file.
 
@@ -12,9 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Research and architecture proposal (`docs/PROPOSAL.md`) and spike measurements (`docs/SPIKE-RESULTS.md`).
 - Issue forms, pull request template, and `CONTRIBUTING.md`.
 - Test tooling: Vitest with coverage, ESLint with type-aware rules, `npm run check`, and a fake Spotify server helper for offline tests.
+- Unit tests for volume ramps, fades and the playback error limiter (31 tests).
 
 ### Changed
 
+- Fading out no longer pauses if you move the volume slider during the fade; your volume change wins.
+- Volume ramp, fade and playback-error-burst logic moved into small modules (`src/renderer/fade.ts`, `src/main/error-burst.ts`) so they can be tested.
 - TypeScript is pinned to 6.0.x, the newest line supported by `typescript-eslint`.
 
 [Unreleased]: https://github.com/engineerlish/Playlish/commits/main

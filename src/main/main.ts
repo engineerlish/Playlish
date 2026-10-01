@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { PlaybackState, PlayerCommand, Snapshot, UiCommand } from '../shared/types';
 import { Auth, SessionExpiredError } from './auth';
 import { loadConfig, redirectUriFor, type SpikeConfig } from './config';
+import { ErrorBurstLimiter } from './error-burst';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
 import { SpotifyApiError, describeApiError, startPlayback, transferPlayback } from './spotify';
@@ -37,11 +38,7 @@ let deviceId: string | null = null;
 let playback: PlaybackState | null = null;
 let status = 'Starting…';
 let startedPlayback = false;
-let recentPlaybackErrors: number[] = [];
-
-// CHANGE HERE: stop the player after this many playback errors inside the window below, so a licence failure doesn't loop.
-const MAX_PLAYBACK_ERRORS = 3;
-const PLAYBACK_ERROR_WINDOW_MS = 10_000;
+const playbackErrors = new ErrorBurstLimiter();
 
 /** Path of the encrypted session file (spike only; the MVP stores tokens in Windows Credential Manager). */
 function sessionFile(): string {
@@ -207,14 +204,6 @@ async function playConfiguredTrack(): Promise<void> {
   }
 }
 
-/** Records a playback error and reports whether the burst limit has been reached. */
-function tooManyPlaybackErrors(): boolean {
-  const now = Date.now();
-  recentPlaybackErrors = recentPlaybackErrors.filter((t) => now - t < PLAYBACK_ERROR_WINDOW_MS);
-  recentPlaybackErrors.push(now);
-  return recentPlaybackErrors.length >= MAX_PLAYBACK_ERRORS;
-}
-
 /** Wires the IPC channels between main, the UI window and the playback host. */
 function registerIpc(): void {
   // Host -> main
@@ -236,10 +225,11 @@ function registerIpc(): void {
   });
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
     log(`[error] player ${kind}: ${message}`);
-    if (kind === 'playback_error' && tooManyPlaybackErrors()) {
+    if (kind === 'playback_error' && playbackErrors.record()) {
       log('[error] too many playback errors; stopping the playback host');
       hostWindow?.destroy();
       startedPlayback = false;
+      playbackErrors.reset();
       setStatus(
         'Playback failed repeatedly (Spotify refused the Widevine licence). Log in again to retry; details are in playlish.log.',
       );
