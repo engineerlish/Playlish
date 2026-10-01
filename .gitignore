@@ -3,3 +3,5 @@ dist/
 spike.config.json
 *.log
 coverage/
+test-results.json
+ci-summary.md
