@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Some launches played no audio even though the player said it was playing (#17). The startup sequence sent a transfer immediately before the play command, which aborted the first audio load. The redundant transfer is gone (17 of 18 launches played afterwards, against 11 of 27 before).
+- A malformed `spike.config.json` (a Client ID without quotes, a bad port, an invalid track URI, a file that is not a JSON object) now shows a clear message instead of crashing start-up or being silently accepted, and an empty `PLAYLISH_CLIENT_ID` no longer overrides the file (#28).
 - A playback stall watchdog nudges and, if needed, rebuilds the playback host when the position stops advancing while playing.
 - Closing an old playback host window can no longer clear the state of a newly created one.
 
