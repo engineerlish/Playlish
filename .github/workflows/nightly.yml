@@ -1,0 +1,62 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-suite:
+    name: Full suite and dependency audit
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests with coverage
+        run: npm run test:coverage -- --reporter=default --reporter=json --outputFile.json=test-results.json
+
+      - name: Build
+        run: npm run build
+
+      # Nightly audit is stricter than the pull request one: any advisory level is reported.
+      - name: Dependency audit (all levels)
+        run: npm audit
+
+      - name: Write summary
+        if: always()
+        shell: bash
+        run: |
+          node scripts/ci-summary.mjs ci-summary.md
+          cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-reports
+          path: |
+            test-results.json
+            coverage/
+            ci-summary.md
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # Placeholder for the soak and performance checks (#10) so the schedule and reporting are already in place.
