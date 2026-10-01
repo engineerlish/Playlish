@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement
+labels: ["feature", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Could this be a plugin instead?
+      description: Playlish keeps the base client small, so features that fit the plugin API are usually better as plugins.
+      options: [Yes, No, Not sure]
+    validations:
+      required: true

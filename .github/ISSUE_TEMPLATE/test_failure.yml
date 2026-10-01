@@ -1,0 +1,40 @@
+name: Test failure
+description: An automated test fails (CI or local)
+labels: ["test-failure", "needs-triage"]
+body:
+  - type: input
+    id: suite
+    attributes:
+      label: Suite and test name
+      placeholder: "plugins: sandbox terminates an infinite loop"
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error and stack trace
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: run
+    attributes:
+      label: CI run link or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: flaky
+    attributes:
+      label: Does it pass on retry?
+      options: [No, it fails every time, Yes, it is flaky, Not checked]
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce locally
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: OS, Node and Electron versions, app version
