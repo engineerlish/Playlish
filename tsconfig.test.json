@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["tests/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "src/renderer/fade.ts"]
+  "include": ["tests/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "src/renderer/fade.ts", "src/renderer/stall.ts"]
 }
