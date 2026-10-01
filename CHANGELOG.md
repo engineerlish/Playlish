@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are documented in this file.
 
@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Test tooling: Vitest with coverage, ESLint with type-aware rules, `npm run check`, and a fake Spotify server helper for offline tests.
 - Unit tests for volume ramps, fades and the playback error limiter (31 tests).
 - Unit tests for the Spotify API client: request shape, device-not-found retry, error parsing for the classic and July 2026 quota shapes, and user-facing messages (30 tests).
+- Unit tests for the config loader, the loopback server (allowlist, path traversal, callback escaping) and the metrics logger (46 tests).
 - Unit tests for PKCE login, callback validation, token exchange and refresh (29 tests).
 
 ### Changed
