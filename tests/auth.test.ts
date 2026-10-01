@@ -118,6 +118,32 @@ describe('Auth: starting a login', () => {
     await expect(first.login).rejects.toThrow('Login restarted');
   });
 
+  it('keeps a restarted login alive after the first login would have timed out (#22)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { auth, fetchMock } = setup();
+      const opened: string[] = [];
+      const open = (url: string) => {
+        opened.push(url);
+        return Promise.resolve();
+      };
+      auth.startLogin(open).catch(() => undefined); // login A at t = 0
+      await vi.advanceTimersByTimeAsync(60_000);
+      const second = auth.startLogin(open); // login B at t = 1 minute; A is rejected
+      second.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(LOGIN_TIMEOUT_MS - 60_000 + 1000); // t = just past A's original timeout
+      const state = new URL(opened[1] ?? 'http://missing').searchParams.get('state') ?? '';
+      fetchMock.mockResolvedValueOnce(tokenResponse());
+
+      // B is only about 4 minutes old, so its callback must still be accepted.
+      await expect(auth.handleCallback(new URLSearchParams({ code: 'c', state }))).resolves.toBeUndefined();
+      await expect(second).resolves.toBeUndefined();
+      expect(auth.isLoggedIn()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('times out when the user never comes back', async () => {
     vi.useFakeTimers();
     try {
