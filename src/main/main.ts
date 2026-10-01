@@ -308,7 +308,7 @@ async function main(): Promise<void> {
   createTray();
 
   serverPort = result.port;
-  if (config) auth = new Auth(config.clientId, redirectUriFor(config.port), saveRefreshToken);
+  if (config) auth = new Auth(config.clientId, redirectUriFor(config.port), { onRefreshToken: saveRefreshToken });
   try {
     // The server always starts so the UI window can load and explain configuration problems.
     await startServer({

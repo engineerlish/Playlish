@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
-const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+export const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
+export const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 // CHANGE HERE: scopes requested at login. The Web Playback SDK rejects tokens without `streaming`, `user-read-email` and
 // `user-read-private` ("Invalid token scopes"); the other two let us control playback through the Web API.
-const SCOPES = [
+export const SCOPES = [
   'streaming',
   'user-read-email',
   'user-read-private',
@@ -12,9 +12,9 @@ const SCOPES = [
   'user-modify-playback-state',
 ];
 // CHANGE HERE: how long we wait for the user to finish logging in in the browser.
-const LOGIN_TIMEOUT_MS = 5 * 60_000;
+export const LOGIN_TIMEOUT_MS = 5 * 60_000;
 // CHANGE HERE: refresh the access token this long before it expires.
-const REFRESH_MARGIN_MS = 60_000;
+export const REFRESH_MARGIN_MS = 60_000;
 
 interface TokenResponse {
   access_token: string;
@@ -43,6 +43,16 @@ function base64Url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Things the class needs from the outside; all optional, and replaced in tests. */
+export interface AuthDeps {
+  /** HTTP client; defaults to the global fetch. */
+  fetch?: typeof fetch;
+  /** Clock in epoch milliseconds; defaults to Date.now. */
+  now?: () => number;
+  /** Called whenever Spotify hands us a (new) refresh token so the caller can persist it. */
+  onRefreshToken?: (refreshToken: string) => void;
+}
+
 /**
  * Authorization Code flow with PKCE. No client secret is ever used or stored.
  * Spike limitation: tokens live in memory only. Persistence in Windows Credential Manager comes with the MVP.
@@ -54,12 +64,19 @@ export class Auth {
   private pending: PendingLogin | null = null;
   private refreshing: Promise<string> | null = null;
 
+  private readonly fetchFn: typeof fetch;
+  private readonly now: () => number;
+  private readonly onRefreshToken: (refreshToken: string) => void;
+
   constructor(
     private readonly clientId: string,
     private readonly redirectUri: string,
-    /** Called whenever Spotify hands us a (new) refresh token so the caller can persist it. */
-    private readonly onRefreshToken: (refreshToken: string) => void = () => undefined,
-  ) {}
+    deps: AuthDeps = {},
+  ) {
+    this.fetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
+    this.now = deps.now ?? Date.now;
+    this.onRefreshToken = deps.onRefreshToken ?? (() => undefined);
+  }
 
   /** Restores a session from a previously saved refresh token; the first getAccessToken() call will refresh it. */
   restore(refreshToken: string): void {
@@ -152,7 +169,7 @@ export class Auth {
 
   /** Returns a valid access token, refreshing it first if it is about to expire. Concurrent callers share one refresh. */
   async getAccessToken(): Promise<string> {
-    if (this.accessToken && Date.now() < this.expiresAtMs - REFRESH_MARGIN_MS) return this.accessToken;
+    if (this.accessToken && this.now() < this.expiresAtMs - REFRESH_MARGIN_MS) return this.accessToken;
     if (!this.refreshToken) throw new SessionExpiredError();
     this.refreshing ??= this.refresh().finally(() => {
       this.refreshing = null;
@@ -182,7 +199,7 @@ export class Auth {
       this.refreshToken = token.refresh_token;
       this.onRefreshToken(token.refresh_token);
     }
-    this.expiresAtMs = Date.now() + token.expires_in * 1000;
+    this.expiresAtMs = this.now() + token.expires_in * 1000;
   }
 
   /** Rejects and clears the in-flight login. */
@@ -196,7 +213,7 @@ export class Auth {
 
   /** POSTs to the token endpoint (PKCE: client_id only, no secret). */
   private async postToken(body: Record<string, string>): Promise<TokenResponse> {
-    const res = await fetch(TOKEN_URL, {
+    const res = await this.fetchFn(TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: this.clientId, ...body }),
