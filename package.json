@@ -9,11 +9,23 @@
   "scripts": {
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/build-assets.mjs",
     "start": "npm run build && electron .",
-    "start:tray": "npm run build && electron . --tray"
+    "start:tray": "npm run build && electron . --tray",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "audit:deps": "npm audit --audit-level=high",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.3",
+    "@vitest/coverage-v8": "^5.0.3",
     "electron": "github:castlabs/electron-releases#v44.1.0+wvcus",
-    "typescript": "^7.0.2"
+    "eslint": "^10.11.0",
+    "typescript": "~6.0",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
   }
 }
