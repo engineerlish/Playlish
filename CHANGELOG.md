@@ -25,4 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Volume ramp, fade and playback-error-burst logic moved into small modules (`src/renderer/fade.ts`, `src/main/error-burst.ts`) so they can be tested.
 - TypeScript is pinned to 6.0.x, the newest line supported by `typescript-eslint`.
 
+### Fixed
+
+- Some launches played no audio even though the player said it was playing (#17). The startup sequence sent a transfer immediately before the play command, which aborted the first audio load. The redundant transfer is gone (17 of 18 launches played afterwards, against 11 of 27 before).
+- A playback stall watchdog nudges and, if needed, rebuilds the playback host when the position stops advancing while playing.
+- Closing an old playback host window can no longer clear the state of a newly created one.
+
 [Unreleased]: https://github.com/engineerlish/Playlish/commits/main
