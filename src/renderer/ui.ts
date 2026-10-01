@@ -1,0 +1,93 @@
+import type { PlaybackState, Snapshot, UiApi } from '../shared/types';
+
+declare global {
+  interface Window {
+    ui: UiApi;
+  }
+}
+
+// CHANGE HERE: how often the progress bar redraws while a track is playing (only runs while the UI window is open and playing).
+const PROGRESS_TICK_MS = 500;
+
+/** Looks up an element by id and fails loudly if the HTML and script disagree. */
+function el<T extends HTMLElement>(id: string): T {
+  const found = document.getElementById(id);
+  if (!found) throw new Error(`Missing element #${id}`);
+  return found as T;
+}
+
+const statusEl = el<HTMLDivElement>('status');
+const configPanel = el<HTMLDivElement>('configPanel');
+const loginBtn = el<HTMLButtonElement>('login');
+const playBtn = el<HTMLButtonElement>('play');
+const trackEl = el<HTMLDivElement>('track');
+const artistsEl = el<HTMLDivElement>('artists');
+const progressEl = el<HTMLProgressElement>('progress');
+const prevBtn = el<HTMLButtonElement>('prev');
+const toggleBtn = el<HTMLButtonElement>('toggle');
+const fadeBtn = el<HTMLButtonElement>('fade');
+const nextBtn = el<HTMLButtonElement>('next');
+const volumeEl = el<HTMLInputElement>('volume');
+const metricsEl = el<HTMLDivElement>('metrics');
+const logPathEl = el<HTMLElement>('logPath');
+
+let current: PlaybackState | null = null;
+let tickTimer: number | null = null;
+
+/** Draws the progress bar from the last sampled position, interpolating while playing. */
+function drawProgress(): void {
+  if (!current || current.durationMs === 0) {
+    progressEl.value = 0;
+    return;
+  }
+  const elapsed = current.paused ? 0 : Date.now() - current.sampledAt;
+  progressEl.value = Math.min(1, (current.positionMs + elapsed) / current.durationMs);
+}
+
+/** Starts or stops the progress timer so nothing runs while paused. */
+function syncTick(): void {
+  const shouldRun = current !== null && !current.paused;
+  if (shouldRun && tickTimer === null) tickTimer = window.setInterval(drawProgress, PROGRESS_TICK_MS);
+  if (!shouldRun && tickTimer !== null) {
+    window.clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
+
+/** Re-renders the whole window from a snapshot. */
+function render(s: Snapshot): void {
+  current = s.playback;
+  statusEl.textContent = s.status;
+  logPathEl.textContent = s.perfLogPath;
+
+  configPanel.hidden = s.configError === null;
+  configPanel.textContent = s.configError ?? '';
+  loginBtn.disabled = s.configError !== null;
+  loginBtn.textContent = s.loggedIn ? 'Log in again' : 'Log in with Spotify';
+
+  for (const btn of [playBtn, prevBtn, toggleBtn, fadeBtn, nextBtn]) btn.disabled = !s.deviceReady;
+  volumeEl.disabled = !s.deviceReady;
+
+  trackEl.textContent = s.playback?.track ?? 'Nothing playing';
+  artistsEl.textContent = s.playback?.artists ?? ' ';
+  if (s.playback && document.activeElement !== volumeEl) volumeEl.value = String(Math.round(s.playback.volume * 100));
+
+  const m = s.metrics;
+  metricsEl.textContent = m
+    ? `${m.processes} processes · working set ${m.workingSetMb} MB · private ${m.privateMb} MB · CPU ${m.cpuPercent}%`
+    : 'Waiting for first sample…';
+
+  drawProgress();
+  syncTick();
+}
+
+loginBtn.addEventListener('click', () => window.ui.login());
+playBtn.addEventListener('click', () => window.ui.command({ type: 'playTrack' }));
+prevBtn.addEventListener('click', () => window.ui.command({ type: 'previous' }));
+toggleBtn.addEventListener('click', () => window.ui.command({ type: 'toggle' }));
+fadeBtn.addEventListener('click', () => window.ui.command({ type: 'fadeToggle' }));
+nextBtn.addEventListener('click', () => window.ui.command({ type: 'next' }));
+volumeEl.addEventListener('input', () => window.ui.command({ type: 'volume', value: Number(volumeEl.value) / 100 }));
+
+window.ui.onSnapshot(render);
+window.ui.requestSnapshot();
