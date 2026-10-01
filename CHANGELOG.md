@@ -14,9 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Issue forms, pull request template, and `CONTRIBUTING.md`.
 - Test tooling: Vitest with coverage, ESLint with type-aware rules, `npm run check`, and a fake Spotify server helper for offline tests.
 - Unit tests for volume ramps, fades and the playback error limiter (31 tests).
+- Unit tests for the Spotify API client: request shape, device-not-found retry, error parsing for the classic and July 2026 quota shapes, and user-facing messages (30 tests).
 
 ### Changed
 
+- The Spotify API client takes injectable `fetch`, base URL and delay, and the two playback calls share one retry routine.
 - Fading out no longer pauses if you move the volume slider during the fade; your volume change wins.
 - Volume ramp, fade and playback-error-burst logic moved into small modules (`src/renderer/fade.ts`, `src/main/error-burst.ts`) so they can be tested.
 - TypeScript is pinned to 6.0.x, the newest line supported by `typescript-eslint`.
