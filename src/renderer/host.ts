@@ -53,7 +53,7 @@ let lastState: SpotifySdkState | null = null;
 
 /** Registers an SDK event listener with a typed payload. */
 function on<T>(event: string, callback: (payload: T) => void): void {
-  player.addListener(event, callback as (payload: never) => void);
+  player.addListener(event, callback);
 }
 
 /** Converts the SDK state into the reduced state sent to the main process. */
