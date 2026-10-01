@@ -1,0 +1,19 @@
+{
+  "name": "playlish",
+  "productName": "Playlish",
+  "version": "0.0.1-spike",
+  "private": true,
+  "description": "Lightweight, plugin-friendly Spotify desktop client (unofficial, not affiliated with Spotify)",
+  "license": "MIT",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/build-assets.mjs",
+    "start": "npm run build && electron .",
+    "start:tray": "npm run build && electron . --tray"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "electron": "github:castlabs/electron-releases#v44.1.0+wvcus",
+    "typescript": "^7.0.2"
+  }
+}
