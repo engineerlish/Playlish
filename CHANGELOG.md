@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Apache-2.0 license and NOTICE file.
 - castLabs Electron playback spike: PKCE login over a loopback redirect, Web Playback SDK in a hidden host window, UI window that is destroyed when closed, tray icon, and a RAM/CPU logger.
 - Research and architecture proposal (`docs/PROPOSAL.md`) and spike measurements (`docs/SPIKE-RESULTS.md`).
 - Issue forms, pull request template, and `CONTRIBUTING.md`.
