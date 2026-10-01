@@ -1,5 +1,6 @@
 import type { HostApi, PlaybackState, PlayerCommand } from '../shared/types';
 import { FadeController, VolumeRamper } from './fade.js';
+import { StallDetector, StallRecovery } from './stall.js';
 
 /* Minimal typings for the parts of the Spotify Web Playback SDK used here (avoids an extra @types dependency). */
 interface SpotifyTrack {
@@ -43,11 +44,16 @@ declare global {
 const DEVICE_NAME = 'Playlish (spike)';
 // CHANGE HERE: starting volume (0..1).
 const INITIAL_VOLUME = 0.5;
+// CHANGE HERE: how often playback progress is checked while playing (the timer does not run while paused).
+const WATCHDOG_INTERVAL_MS = 2000;
 
 let player: SpotifyPlayer;
 let ramper: VolumeRamper;
 let fader: FadeController;
 let baseVolume = INITIAL_VOLUME;
+const stallDetector = new StallDetector();
+const stallRecovery = new StallRecovery();
+let watchdogTimer: number | null = null;
 let lastState: SpotifySdkState | null = null;
 
 /** Registers an SDK event listener with a typed payload. */
@@ -73,6 +79,41 @@ function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
 /** Reports the latest known state (used after volume changes too, since the SDK has no volume event). */
 function reportState(): void {
   window.host.state(toPlaybackState(lastState));
+}
+
+/**
+ * Checks that a "playing" player is really advancing. Some launches start playing and then freeze (#17). A first stall
+ * is nudged with pause and resume; a repeat soon after asks the main process to rebuild this host.
+ */
+async function checkStall(): Promise<void> {
+  const state = await player.getCurrentState();
+  const now = Date.now();
+  const stalled = stallDetector.observe(state ? { paused: state.paused, positionMs: state.position } : null, now);
+  const action = stallRecovery.next(stalled, now);
+  if (action === 'nudge') {
+    window.host.log(`playback stalled at ${state?.position ?? -1} ms; nudging with pause and resume`);
+    stallDetector.reset();
+    await player.pause();
+    await player.resume();
+  } else if (action === 'restart') {
+    window.host.log(`playback stalled again at ${state?.position ?? -1} ms; asking for a host restart`);
+    stallDetector.reset();
+    window.host.error('stalled', 'Playback stopped advancing and a nudge did not help.');
+  }
+}
+
+/** Runs the stall check only while the player is playing, so a paused or idle player has no timer at all. */
+function syncWatchdog(): void {
+  const playing = lastState !== null && !lastState.paused;
+  if (playing && watchdogTimer === null) {
+    watchdogTimer = window.setInterval(() => {
+      checkStall().catch((err: unknown) => window.host.log(`stall check failed: ${String(err)}`));
+    }, WATCHDOG_INTERVAL_MS);
+  } else if (!playing && watchdogTimer !== null) {
+    window.clearInterval(watchdogTimer);
+    watchdogTimer = null;
+    stallDetector.reset();
+  }
 }
 
 /** Executes a command from the main process. */
@@ -116,6 +157,7 @@ function startPlayer(): void {
   on<SpotifySdkState | null>('player_state_changed', (state) => {
     lastState = state;
     reportState();
+    syncWatchdog();
   });
   for (const kind of ['initialization_error', 'authentication_error', 'account_error', 'playback_error']) {
     on<{ message: string }>(kind, ({ message }) => window.host.error(kind, message));

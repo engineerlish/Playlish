@@ -7,7 +7,7 @@ import { loadConfig, redirectUriFor, type SpikeConfig } from './config';
 import { ErrorBurstLimiter } from './error-burst';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
-import { SpotifyApiError, describeApiError, startPlayback, transferPlayback } from './spotify';
+import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
 
 /*
  * Playlish spike (concept B: castLabs Electron).
@@ -39,6 +39,8 @@ let playback: PlaybackState | null = null;
 let status = 'Starting…';
 let startedPlayback = false;
 const playbackErrors = new ErrorBurstLimiter();
+// CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
+const stallRestarts = new ErrorBurstLimiter(3, 5 * 60_000);
 
 /** Path of the encrypted session file (spike only; the MVP stores tokens in Windows Credential Manager). */
 function sessionFile(): string {
@@ -131,16 +133,25 @@ function openUi(): void {
  * page, and failed requests to Spotify hosts (path only, query strings are dropped so tokens never reach the log).
  */
 function attachHostDiagnostics(win: BrowserWindow): void {
+  // Opt-in firehose for investigations: PLAYLISH_DEBUG=1 logs every console message and every Spotify request status.
+  const verbose = process.env['PLAYLISH_DEBUG'] === '1';
   win.webContents.on('console-message', (event) => {
-    if (event.level === 'warning' || event.level === 'error') {
+    if (verbose || event.level === 'warning' || event.level === 'error') {
       log(`[host console ${event.level}] ${event.message.slice(0, 300)}`);
     }
   });
-  win.webContents.session.webRequest.onCompleted({ urls: ['https://*.spotify.com/*', 'https://*.scdn.co/*'] }, (details) => {
-    if (details.statusCode >= 400) {
+  // Spotify's own hosts always (failures only); every https host in verbose mode, because the audio itself comes from CDNs.
+  const filter = { urls: verbose ? ['https://*/*'] : ['https://*.spotify.com/*', 'https://*.scdn.co/*'] };
+  win.webContents.session.webRequest.onCompleted(filter, (details) => {
+    if (verbose || details.statusCode >= 400) {
       const url = new URL(details.url);
       log(`[host http ${details.statusCode}] ${details.method} ${url.host}${url.pathname}`);
     }
+  });
+  // Network-level failures (aborted, reset, DNS, TLS) never reach onCompleted.
+  win.webContents.session.webRequest.onErrorOccurred(filter, (details) => {
+    const url = new URL(details.url);
+    log(`[host net-error] ${details.error} ${details.method} ${url.host}${url.pathname}`);
   });
 }
 
@@ -159,20 +170,42 @@ function createHostWindow(): void {
       // Audio must keep playing and timers (fades) must keep running while the window is hidden.
       backgroundThrottling: false,
       autoplayPolicy: 'no-user-gesture-required',
-      // Experiment hook while we investigate an intermittent Widevine 403: PLAYLISH_PARTITION overrides the partition.
-      // CHANGE HERE: default partition for the playback host (a "persist:" prefix keeps its storage on disk).
-      partition: process.env['PLAYLISH_PARTITION'] ?? 'persist:playback',
+      // CHANGE HERE: partition for the playback host (a "persist:" prefix keeps its storage on disk). Tested during #17:
+      // the partition's stored state is not the cause of silent playback.
+      partition: 'persist:playback',
     },
   });
   hostWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   attachHostDiagnostics(hostWindow);
-  hostWindow.on('closed', () => {
+  const win = hostWindow;
+  win.on('closed', () => {
+    // A restart creates the new window before this fires for the old one; only clear state that still belongs to it.
+    if (hostWindow !== win) return;
     hostWindow = null;
     deviceId = null;
     playback = null;
     pushSnapshot();
   });
   void hostWindow.loadURL(`http://127.0.0.1:${serverPort}/host.html`);
+}
+
+/** Rebuilds the playback host after a stall; gives up (with a clear message) if it keeps happening. */
+function restartHost(): void {
+  if (stallRestarts.record()) {
+    log('[error] playback keeps stalling; not restarting again');
+    hostWindow?.destroy();
+    startedPlayback = false;
+    setStatus('Playback keeps stalling. Log in again or restart Playlish; details are in playlish.log.');
+    return;
+  }
+  log('[status] playback stalled; rebuilding the playback host');
+  hostWindow?.destroy();
+  hostWindow = null;
+  deviceId = null;
+  playback = null;
+  startedPlayback = false;
+  setStatus('Playback stalled. Restarting the player…');
+  createHostWindow();
 }
 
 /** Runs the browser login, then starts the playback host. Errors are shown in the status line. */
@@ -192,8 +225,11 @@ async function login(): Promise<void> {
 async function playConfiguredTrack(): Promise<void> {
   if (!auth || !config || !deviceId) return;
   try {
+    // One command only. The play call carries the device id, which also makes it the active device. A separate transfer
+    // before it made the SDK start loading the account's remembered track and then abort that load when play arrived
+    // (net::ERR_ABORTED on the first audio request), leaving some launches silent (#17). 404s while the new device is
+    // still unknown to the Web API are retried inside startPlayback.
     setStatus('Connecting the player to your account…');
-    await transferPlayback(await auth.getAccessToken(), deviceId);
     await startPlayback(await auth.getAccessToken(), deviceId, config.trackUri);
     setStatus('Playing.');
   } catch (err) {
@@ -211,6 +247,7 @@ function registerIpc(): void {
     if (!auth) throw new Error('Not configured');
     return auth.getAccessToken();
   });
+  ipcMain.on('host:log', (_event, message: string) => log(`[host] ${message}`));
   ipcMain.on('host:ready', (_event, id: string) => {
     deviceId = id;
     setStatus('Player ready.');
@@ -220,11 +257,18 @@ function registerIpc(): void {
     }
   });
   ipcMain.on('host:state', (_event, state: PlaybackState | null) => {
+    if (process.env['PLAYLISH_DEBUG'] === '1') {
+      log(`[state] ${state ? `paused=${String(state.paused)} position=${state.positionMs}ms track="${state.track}"` : 'none'}`);
+    }
     playback = state;
     pushSnapshot();
   });
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
     log(`[error] player ${kind}: ${message}`);
+    if (kind === 'stalled') {
+      restartHost();
+      return;
+    }
     if (kind === 'playback_error' && playbackErrors.record()) {
       log('[error] too many playback errors; stopping the playback host');
       hostWindow?.destroy();

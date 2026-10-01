@@ -53,6 +53,8 @@ export interface HostApi {
   ready(deviceId: string): void;
   state(state: PlaybackState | null): void;
   error(kind: string, message: string): void;
+  /** Diagnostic line for the app log (kept out of the error path so it is not mistaken for a failure). */
+  log(message: string): void;
   onCommand(callback: (command: PlayerCommand) => void): void;
 }
 
