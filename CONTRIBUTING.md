@@ -8,6 +8,10 @@ Thanks for helping out. Playlish is an unofficial, open-source Spotify client fo
 - Nothing may capture, process, or alter Spotify audio, or sync it with visual media.
 - Never commit secrets, tokens, Client IDs, credentials, or personal data.
 
+## License
+
+Playlish is licensed under the [Apache License 2.0](LICENSE). By submitting a contribution you agree that it is licensed under the same terms (Apache-2.0, section 5), unless you state otherwise in the pull request.
+
 ## How to contribute
 
 1. **Fork** the repository and clone your fork. Open pull requests from your fork, not from branches on this repo.
