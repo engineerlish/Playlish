@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in Playlish does not work as expected
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not paste tokens, your Client ID, your email address, or other personal data. Use "Export diagnostics" in the app, which redacts logs for you.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [auth, player, library, audio, plugins, ui, api-client, not sure]
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it?
+      options:
+        - Critical (crash, data loss, security)
+        - High (a core feature is broken)
+        - Medium (degraded, there is a workaround)
+        - Low (minor or cosmetic)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Playlish version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or diagnostics
+      description: Paste the relevant lines or attach the exported diagnostics file.
+      render: text

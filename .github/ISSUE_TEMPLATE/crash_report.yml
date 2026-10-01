@@ -1,0 +1,45 @@
+name: Crash report
+description: Playlish or one of its processes crashed or froze
+labels: ["crash", "severity:critical", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please attach the crash report file or exported diagnostics. Do not paste tokens, your Client ID, your email address, or other personal data.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What were you doing when it crashed?
+    validations:
+      required: true
+  - type: dropdown
+    id: process
+    attributes:
+      label: What crashed
+      options: [whole app, playback host, UI window, a plugin, not sure]
+    validations:
+      required: true
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin id and version (if a plugin was involved)
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: Can you reproduce it?
+      options: [Always, Sometimes, Once]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Playlish version
+    validations:
+      required: true
+  - type: textarea
+    id: crash-report
+    attributes:
+      label: Crash report or redacted logs
+      render: text
+    validations:
+      required: true

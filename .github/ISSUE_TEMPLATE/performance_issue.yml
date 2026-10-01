@@ -1,0 +1,31 @@
+name: Performance issue
+description: High memory or CPU use, slow start-up, or degradation over time
+labels: ["performance", "needs-triage"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is affected
+      options: [Idle RAM, RAM during playback, Idle CPU, CPU during playback, Start-up time, Memory grows over time, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: measurements
+    attributes:
+      label: Measurements
+      description: Numbers from the performance log (perf.csv) or Task Manager, and the budget you are comparing against.
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: What was running
+      description: Playing or paused, window open or in the tray, enabled plugins, how long the app had been running.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Playlish version
+    validations:
+      required: true

@@ -1,0 +1,46 @@
+name: Plugin submission
+description: Share a plugin so it can be listed
+labels: ["plugin-system", "needs-triage"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Plugin name and id
+    validations:
+      required: true
+  - type: input
+    id: repo
+    attributes:
+      label: Source repository or release URL
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What it does
+    validations:
+      required: true
+  - type: input
+    id: api
+    attributes:
+      label: Required plugin API version
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: Permissions requested and why
+      description: List each permission and the reason it is needed, including any network domains.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: The plugin has a license and its source is public
+          required: true
+        - label: It does not alter or capture Spotify audio, or sync music with visual media
+          required: true
+        - label: It only uses the documented plugin API
+          required: true
