@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are documented in this file.
 
@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Test tooling: Vitest with coverage, ESLint with type-aware rules, `npm run check`, and a fake Spotify server helper for offline tests.
 - Unit tests for volume ramps, fades and the playback error limiter (31 tests).
 - Unit tests for the Spotify API client: request shape, device-not-found retry, error parsing for the classic and July 2026 quota shapes, and user-facing messages (30 tests).
+- Unit tests for the config loader, the loopback server (allowlist, path traversal, callback escaping) and the metrics logger (46 tests).
 - Unit tests for PKCE login, callback validation, token exchange and refresh (29 tests).
 
 ### Changed
@@ -28,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Some launches played no audio even though the player said it was playing (#17). The startup sequence sent a transfer immediately before the play command, which aborted the first audio load. The redundant transfer is gone (17 of 18 launches played afterwards, against 11 of 27 before).
-- Restarting the login (for example clicking Log in twice) no longer lets the first login's timeout cancel the second one (#22).
+- A malformed `spike.config.json` (a Client ID without quotes, a bad port, an invalid track URI, a file that is not a JSON object) now shows a clear message instead of crashing start-up or being silently accepted, and an empty `PLAYLISH_CLIENT_ID` no longer overrides the file (#28).
 - A playback stall watchdog nudges and, if needed, rebuilds the playback host when the position stops advancing while playing.
 - Closing an old playback host window can no longer clear the state of a newly created one.
 

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege by default; the job that comments on pull requests adds pull-requests: write.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck, lint, test and build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # --ignore-scripts skips downloading the Electron binary (hundreds of MB); typecheck, lint, unit tests and the
+      # TypeScript build do not need it. The E2E job will install it.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests with coverage
+        run: npm run test:coverage -- --reporter=default --reporter=json --outputFile.json=test-results.json
+
+      - name: Build
+        run: npm run build
+
+      - name: Dependency audit
+        run: npm run audit:deps
+
+      - name: Write summary
+        if: always()
+        shell: bash
+        run: |
+          node scripts/ci-summary.mjs ci-summary.md
+          cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Same-repository pull requests only: forks get a read-only token, so they only see the job summary.
+      - name: Comment on the pull request
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('ci-summary.md', 'utf8');
+            const marker = '<!-- playlish-ci-summary -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-reports
+          path: |
+            test-results.json
+            coverage/
+            ci-summary.md
+          if-no-files-found: ignore
+          retention-days: 14
