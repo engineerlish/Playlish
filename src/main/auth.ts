@@ -100,7 +100,8 @@ export class Auth {
    * resolves once the loopback server reports the callback and the code has been exchanged.
    */
   startLogin(openUrl: (url: string) => Promise<void>): Promise<void> {
-    this.pending?.reject(new Error('Login restarted'));
+    // failPending also clears the old login's timeout; leaving it running would later cancel this new login (#22).
+    this.failPending(new Error('Login restarted'));
 
     const verifier = base64Url(randomBytes(64));
     const challenge = base64Url(createHash('sha256').update(verifier).digest());
