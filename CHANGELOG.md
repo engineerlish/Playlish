@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Performance harness (`npm run perf:idle`, `perf:ui`, `perf:soak`) that measures the real app against the budgets in `perf/budgets.json`, startup milestones in the log, and an opt-in soak driver (`PLAYLISH_SOAK=1`). CI reports performance on every pull request against main, and the nightly run adds a 30 minute soak.
 - Structured logging: JSON lines with level, module, error code and context in `logs/playlish.log`, rotated at 1 MB with 3 files kept. Tokens, Client IDs, emails and the Windows user name are redacted before anything is written. `PLAYLISH_DEBUG=1` turns on debug logging.
 - Crash reports in `logs/crashes` for uncaught exceptions, unhandled rejections and crashed renderer or helper processes (newest 10 kept). A crashed playback host is rebuilt automatically.
 - A separate `logs/plugins.log` for plugin errors, tagged with plugin id and version.
@@ -32,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `npm install` now downloads the castLabs Electron binary (its package has no install script of its own); an existing, signed binary is kept.
 - Some launches played no audio even though the player said it was playing (#17). The startup sequence sent a transfer immediately before the play command, which aborted the first audio load. The redundant transfer is gone (17 of 18 launches played afterwards, against 11 of 27 before).
 - A malformed `spike.config.json` (a Client ID without quotes, a bad port, an invalid track URI, a file that is not a JSON object) now shows a clear message instead of crashing start-up or being silently accepted, and an empty `PLAYLISH_CLIENT_ID` no longer overrides the file (#28).
 - A playback stall watchdog nudges and, if needed, rebuilds the playback host when the position stops advancing while playing.
