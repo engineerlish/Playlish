@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Shared request queue for every Spotify Web API call: user actions first, then visible pages, then background work; at most two requests at a time; identical requests in flight share one call; a rate limit pauses everything until Retry-After and retries; a used-up quota pauses background work for 10 minutes. Small response cache with expiry and a size cap.
 - Sign out button: deletes the stored session and stops the player.
 - `tools/audit/scan-profile.ps1` checks a profile folder for secrets stored in plain text (prints only file names and counts).
 - Settings store: one validated JSON file (Client ID, close to tray, start minimized, window state, last page, volume per output device), saved atomically and debounced; invalid values fall back to defaults and a corrupt file is kept aside.
@@ -38,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The rate limit message no longer promises a retry that never happened: playback now goes through the request queue, which really does retry after Retry-After (#24).
 - `npm install` now downloads the castLabs Electron binary (its package has no install script of its own); an existing, signed binary is kept.
 - Some launches played no audio even though the player said it was playing (#17). The startup sequence sent a transfer immediately before the play command, which aborted the first audio load. The redundant transfer is gone (17 of 18 launches played afterwards, against 11 of 27 before).
 - A malformed `spike.config.json` (a Client ID without quotes, a bad port, an invalid track URI, a file that is not a JSON object) now shows a clear message instead of crashing start-up or being silently accepted, and an empty `PLAYLISH_CLIENT_ID` no longer overrides the file (#28).

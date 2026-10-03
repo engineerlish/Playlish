@@ -217,13 +217,13 @@ describe('describeApiError', () => {
     const rate = describeApiError(new SpotifyApiError(429, undefined, 'Too many requests', 7));
     const quota = describeApiError(new SpotifyApiError(429, 'QUOTA_EXCEEDED', 'Too many requests', 7));
 
-    expect(rate).toMatch(/rate limit/i);
+    expect(rate).toMatch(/slow down/i);
     expect(rate).toContain('7');
     expect(rate).not.toBe(quota);
   });
 
   it('copes with a rate limit that has no Retry-After', () => {
-    expect(describeApiError(new SpotifyApiError(429, undefined, 'Too many requests'))).toMatch(/rate limit/i);
+    expect(describeApiError(new SpotifyApiError(429, undefined, 'Too many requests'))).toMatch(/slow down/i);
   });
 
   it('asks for Premium on PREMIUM_REQUIRED', () => {

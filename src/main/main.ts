@@ -14,6 +14,7 @@ import { SettingsStore } from './settings';
 import { TokenStore } from './token-store';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
+import { RequestQueue } from './spotify/queue';
 
 /*
  * Playlish spike (concept B: castLabs Electron).
@@ -56,6 +57,8 @@ let startedPlayback = false;
 let crashNotice: CrashReport | null = null;
 let settings: SettingsStore | null = null;
 let tokens: TokenStore | null = null;
+// Every Web API call goes through this queue: priorities, Retry-After and the quota pause (#41).
+const apiQueue = new RequestQueue();
 let uiReadyLogged = false;
 const playbackErrors = new ErrorBurstLimiter();
 // CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
@@ -329,7 +332,14 @@ async function playConfiguredTrack(): Promise<void> {
     // (net::ERR_ABORTED on the first audio request), leaving some launches silent (#17). 404s while the new device is
     // still unknown to the Web API are retried inside startPlayback.
     setStatus('Connecting the player to your account…');
-    await startPlayback(await auth.getAccessToken(), deviceId, config.trackUri);
+    const session = auth;
+    const device = deviceId;
+    const track = config.trackUri;
+    await apiQueue.run({
+      priority: 'user',
+      endpoint: 'PUT /me/player/play',
+      run: async () => startPlayback(await session.getAccessToken(), device, track),
+    });
     setStatus('Playing.');
   } catch (err) {
     playerLog.error('Could not start playback', {
