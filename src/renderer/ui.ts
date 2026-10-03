@@ -66,6 +66,7 @@ function render(s: Snapshot): void {
   configPanel.textContent = s.configError ?? '';
   loginBtn.disabled = s.configError !== null;
   loginBtn.textContent = s.loggedIn ? 'Log in again' : 'Log in with Spotify';
+  el<HTMLButtonElement>('signOut').hidden = !s.loggedIn;
 
   for (const btn of [playBtn, prevBtn, toggleBtn, fadeBtn, nextBtn]) btn.disabled = !s.deviceReady;
   volumeEl.disabled = !s.deviceReady;
@@ -94,6 +95,7 @@ prevBtn.addEventListener('click', () => window.ui.command({ type: 'previous' }))
 toggleBtn.addEventListener('click', () => window.ui.command({ type: 'toggle' }));
 fadeBtn.addEventListener('click', () => window.ui.command({ type: 'fadeToggle' }));
 nextBtn.addEventListener('click', () => window.ui.command({ type: 'next' }));
+el<HTMLButtonElement>('signOut').addEventListener('click', () => window.ui.signOut());
 el<HTMLButtonElement>('reportIssue').addEventListener('click', () => window.ui.reportIssue());
 el<HTMLButtonElement>('exportDiagnostics').addEventListener('click', () => window.ui.exportDiagnostics());
 el<HTMLButtonElement>('crashReport').addEventListener('click', () => window.ui.answerCrashNotice('report'));

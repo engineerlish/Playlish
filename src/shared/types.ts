@@ -68,6 +68,8 @@ export interface UiApi {
   command(command: UiCommand): void;
   onSnapshot(callback: (snapshot: Snapshot) => void): void;
   requestSnapshot(): void;
+  /** Signs out: deletes the stored session and stops the player. */
+  signOut(): void;
   /** Saves a redacted diagnostics file chosen by the user. */
   exportDiagnostics(): void;
   /** Opens a pre-filled GitHub issue in the browser for the user to review. */

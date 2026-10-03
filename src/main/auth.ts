@@ -51,6 +51,8 @@ export interface AuthDeps {
   now?: () => number;
   /** Called whenever Spotify hands us a (new) refresh token so the caller can persist it. */
   onRefreshToken?: (refreshToken: string) => void;
+  /** Called when Spotify rejects the refresh token, so the caller can delete the stored session. */
+  onSessionExpired?: () => void;
 }
 
 /**
@@ -67,6 +69,7 @@ export class Auth {
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
   private readonly onRefreshToken: (refreshToken: string) => void;
+  private readonly onSessionExpired: () => void;
 
   constructor(
     private readonly clientId: string,
@@ -76,6 +79,7 @@ export class Auth {
     this.fetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
     this.now = deps.now ?? Date.now;
     this.onRefreshToken = deps.onRefreshToken ?? (() => undefined);
+    this.onSessionExpired = deps.onSessionExpired ?? (() => undefined);
   }
 
   /** Restores a session from a previously saved refresh token; the first getAccessToken() call will refresh it. */
@@ -188,6 +192,7 @@ export class Auth {
       if (err instanceof SessionExpiredError) {
         this.accessToken = null;
         this.refreshToken = null;
+        this.onSessionExpired();
       }
       throw err;
     }
