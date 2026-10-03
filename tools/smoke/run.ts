@@ -250,6 +250,21 @@ async function playbackChecks(): Promise<void> {
   await sleep(2500);
   const back = bestOf(2, 2000);
   record({ id: 'fade', name: 'Fade pause and fade resume', status: faded < SILENCE && back > SOUND ? 'pass' : 'fail', details: `after fade-out ${faded}, after fade-in ${back}`, area: 'audio', severity: 'medium' });
+
+  // The login must survive a restart (a bug once deleted the stored session on every start).
+  stopApp();
+  await sleep(2000);
+  const restartOffset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
+  app = spawn(EXE, ['.', `--user-data-dir=${profile}`, `--remote-debugging-port=${DEVTOOLS_PORT}`], { cwd: ROOT, stdio: 'ignore' });
+  const afterRestart = await waitForLog(restartOffset, /Status: (Restoring your session|Not logged in|Welcome to Playlish)/, 30_000);
+  record({
+    id: 'restart',
+    name: 'Login survives a restart',
+    status: afterRestart && /Restoring your session/.test(afterRestart) ? 'pass' : 'fail',
+    details: afterRestart ? (/Restoring/.test(afterRestart) ? '' : 'Playlish asked to log in again after a restart') : 'No status within 30 s after the restart',
+    area: 'auth',
+    severity: 'high',
+  });
 }
 
 /** Steps for features that do not exist yet; they become real checks as the MVP lands. */
