@@ -55,6 +55,8 @@ export interface HostApi {
   error(kind: string, message: string): void;
   /** Diagnostic line for the app log (kept out of the error path so it is not mistaken for a failure). */
   log(message: string): void;
+  /** Forwards an uncaught page error to the main process log. */
+  reportError(message: string, stack?: string): void;
   onCommand(callback: (command: PlayerCommand) => void): void;
 }
 
@@ -64,4 +66,6 @@ export interface UiApi {
   command(command: UiCommand): void;
   onSnapshot(callback: (snapshot: Snapshot) => void): void;
   requestSnapshot(): void;
+  /** Forwards an uncaught page error to the main process log. */
+  reportError(message: string, stack?: string): void;
 }

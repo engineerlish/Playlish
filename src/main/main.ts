@@ -2,9 +2,11 @@ import { BrowserWindow, Menu, Tray, app, components, ipcMain, nativeImage, safeS
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PlaybackState, PlayerCommand, Snapshot, UiCommand } from '../shared/types';
+import { initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
 import { loadConfig, redirectUriFor, type SpikeConfig } from './config';
 import { ErrorBurstLimiter } from './error-burst';
+import { installProcessHandlers } from './logging/crash';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
 import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
@@ -25,6 +27,15 @@ const TRAY_ONLY_FLAG = '--tray';
 // CHANGE HERE: remove these two lines to re-enable hardware acceleration if the UI ever needs it.
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('in-process-gpu');
+
+// Logging and crash capture come first, so even a failure during start-up is recorded.
+const logging = initLogging();
+const log = logging.log;
+const authLog = log.child('auth');
+const hostLog = log.child('host');
+const playerLog = log.child('player');
+const uiLog = log.child('ui');
+installProcessHandlers(process, logging.crashes, () => app.exit(1));
 
 let config: SpikeConfig | null = null;
 let serverPort = 0;
@@ -52,7 +63,7 @@ function saveRefreshToken(token: string): void {
   try {
     if (safeStorage.isEncryptionAvailable()) fs.writeFileSync(sessionFile(), safeStorage.encryptString(token));
   } catch (err) {
-    log(`[error] could not save session: ${(err as Error).message}`);
+    authLog.error('Could not save the session', { code: 'SESSION_SAVE_FAILED', error: err });
   }
 }
 
@@ -84,21 +95,10 @@ function pushSnapshot(): void {
   if (uiWindow && !uiWindow.isDestroyed()) uiWindow.webContents.send('ui:snapshot', snapshot());
 }
 
-/** Appends a timestamped line to playlish.log in the user data folder (for diagnosing errors). */
-function log(line: string): void {
-  console.log(line);
-  try {
-    fs.appendFileSync(path.join(app.getPath('userData'), 'playlish.log'), `${new Date().toISOString()} ${line}
-`);
-  } catch {
-    // Logging must never crash the app.
-  }
-}
-
 /** Updates the status line shown in the UI and logs it. */
 function setStatus(text: string): void {
   status = text;
-  log(`[status] ${text}`);
+  uiLog.info(`Status: ${text}`);
   pushSnapshot();
 }
 
@@ -136,22 +136,26 @@ function attachHostDiagnostics(win: BrowserWindow): void {
   // Opt-in firehose for investigations: PLAYLISH_DEBUG=1 logs every console message and every Spotify request status.
   const verbose = process.env['PLAYLISH_DEBUG'] === '1';
   win.webContents.on('console-message', (event) => {
-    if (verbose || event.level === 'warning' || event.level === 'error') {
-      log(`[host console ${event.level}] ${event.message.slice(0, 300)}`);
-    }
+    const message = event.message.slice(0, 300);
+    if (event.level === 'error') hostLog.error(message, { code: 'HOST_CONSOLE' });
+    else if (event.level === 'warning') hostLog.warn(message, { code: 'HOST_CONSOLE' });
+    else if (verbose) hostLog.debug(message, { code: 'HOST_CONSOLE' });
   });
   // Spotify's own hosts always (failures only); every https host in verbose mode, because the audio itself comes from CDNs.
   const filter = { urls: verbose ? ['https://*/*'] : ['https://*.spotify.com/*', 'https://*.scdn.co/*'] };
   win.webContents.session.webRequest.onCompleted(filter, (details) => {
-    if (verbose || details.statusCode >= 400) {
-      const url = new URL(details.url);
-      log(`[host http ${details.statusCode}] ${details.method} ${url.host}${url.pathname}`);
-    }
+    const url = new URL(details.url);
+    const context = { status: details.statusCode, method: details.method, url: `${url.host}${url.pathname}` };
+    if (details.statusCode >= 400) hostLog.warn(`HTTP ${details.statusCode} ${details.method} ${context.url}`, { code: 'HTTP_ERROR', context });
+    else if (verbose) hostLog.debug(`HTTP ${details.statusCode} ${details.method} ${context.url}`, { code: 'HTTP', context });
   });
   // Network-level failures (aborted, reset, DNS, TLS) never reach onCompleted.
   win.webContents.session.webRequest.onErrorOccurred(filter, (details) => {
     const url = new URL(details.url);
-    log(`[host net-error] ${details.error} ${details.method} ${url.host}${url.pathname}`);
+    const message = `${details.error} ${details.method} ${url.host}${url.pathname}`;
+    // Aborted requests are normal (seeks, skips); they matter only when investigating, as in #17.
+    if (details.error === 'net::ERR_ABORTED') hostLog.debug(message, { code: 'NET_ABORTED' });
+    else hostLog.warn(message, { code: 'NET_ERROR' });
   });
 }
 
@@ -192,13 +196,13 @@ function createHostWindow(): void {
 /** Rebuilds the playback host after a stall; gives up (with a clear message) if it keeps happening. */
 function restartHost(): void {
   if (stallRestarts.record()) {
-    log('[error] playback keeps stalling; not restarting again');
+    playerLog.error('Playback keeps stalling; not restarting again', { code: 'PLAYBACK_STALL_GIVE_UP' });
     hostWindow?.destroy();
     startedPlayback = false;
-    setStatus('Playback keeps stalling. Log in again or restart Playlish; details are in playlish.log.');
+    setStatus('Playback keeps stalling. Log in again or restart Playlish; details are in the log.');
     return;
   }
-  log('[status] playback stalled; rebuilding the playback host');
+  playerLog.warn('Rebuilding the playback host', { code: 'PLAYBACK_HOST_RESTART' });
   hostWindow?.destroy();
   hostWindow = null;
   deviceId = null;
@@ -233,7 +237,11 @@ async function playConfiguredTrack(): Promise<void> {
     await startPlayback(await auth.getAccessToken(), deviceId, config.trackUri);
     setStatus('Playing.');
   } catch (err) {
-    log(`[error] playback start failed: ${err instanceof SpotifyApiError ? `${err.status} ${err.reason ?? ''} ${err.message}` : String(err)}`);
+    playerLog.error('Could not start playback', {
+      code: 'PLAYBACK_START_FAILED',
+      error: err,
+      ...(err instanceof SpotifyApiError ? { context: { status: err.status, reason: err.reason } } : {}),
+    });
     if (err instanceof SpotifyApiError) setStatus(describeApiError(err));
     else if (err instanceof SessionExpiredError) setStatus(err.message);
     else setStatus(`Could not start playback: ${(err as Error).message}`);
@@ -247,7 +255,13 @@ function registerIpc(): void {
     if (!auth) throw new Error('Not configured');
     return auth.getAccessToken();
   });
-  ipcMain.on('host:log', (_event, message: string) => log(`[host] ${message}`));
+  ipcMain.on('host:log', (_event, message: string) => hostLog.info(message));
+  ipcMain.on('renderer:error', (_event, source: string, message: string, stack?: string) => {
+    log.child(`renderer:${source === 'host' ? 'host' : 'ui'}`).error(String(message).slice(0, 500), {
+      code: 'RENDERER_ERROR',
+      ...(stack ? { context: { stack: String(stack).slice(0, 4000) } } : {}),
+    });
+  });
   ipcMain.on('host:ready', (_event, id: string) => {
     deviceId = id;
     setStatus('Player ready.');
@@ -257,25 +271,25 @@ function registerIpc(): void {
     }
   });
   ipcMain.on('host:state', (_event, state: PlaybackState | null) => {
-    if (process.env['PLAYLISH_DEBUG'] === '1') {
-      log(`[state] ${state ? `paused=${String(state.paused)} position=${state.positionMs}ms track="${state.track}"` : 'none'}`);
-    }
+    playerLog.debug(state ? `State: paused=${String(state.paused)} position=${state.positionMs}ms` : 'State: none', {
+      code: 'PLAYER_STATE',
+    });
     playback = state;
     pushSnapshot();
   });
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
-    log(`[error] player ${kind}: ${message}`);
+    playerLog.error(`Player reported ${kind}: ${message}`, { code: `PLAYER_${kind.toUpperCase()}` });
     if (kind === 'stalled') {
       restartHost();
       return;
     }
     if (kind === 'playback_error' && playbackErrors.record()) {
-      log('[error] too many playback errors; stopping the playback host');
+      playerLog.error('Too many playback errors; stopping the playback host', { code: 'PLAYBACK_ERROR_BURST' });
       hostWindow?.destroy();
       startedPlayback = false;
       playbackErrors.reset();
       setStatus(
-        'Playback failed repeatedly (Spotify refused the Widevine licence). Log in again to retry; details are in playlish.log.',
+        'Playback failed repeatedly (Spotify refused the Widevine licence). Log in again to retry; details are in the log.',
       );
       return;
     }
@@ -322,16 +336,30 @@ async function main(): Promise<void> {
     return;
   }
   app.on('second-instance', openUi);
+  app.on('render-process-gone', (_event, contents, details) => {
+    const which = contents === hostWindow?.webContents ? 'host' : contents === uiWindow?.webContents ? 'ui' : 'renderer';
+    logging.crashes.record('renderer-gone', which, { details: { reason: details.reason, exitCode: details.exitCode } });
+    // A dead playback host means silence; rebuild it through the same capped path as a stall.
+    if (which === 'host' && details.reason !== 'clean-exit') restartHost();
+  });
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') return;
+    logging.crashes.record('child-process-gone', details.type, {
+      details: { reason: details.reason, exitCode: details.exitCode, serviceName: details.serviceName ?? null },
+    });
+  });
   // Keep running in the tray when every window is closed.
   app.on('window-all-closed', () => undefined);
   Menu.setApplicationMenu(null);
 
   // castLabs Electron downloads/validates the Widevine CDM asynchronously; the SDK can't start before it is ready.
+  const widevineLog = log.child('widevine');
   const cdmReady = components.whenReady().then(
-    () => console.log('[widevine] components ready:', JSON.stringify(components.status())),
-    (err: unknown) => console.error('[widevine] components failed:', err),
+    () => widevineLog.info('Widevine CDM ready', { context: { status: components.status() } }),
+    (err: unknown) => widevineLog.error('Widevine CDM failed to load', { code: 'WIDEVINE_NOT_READY', error: err }),
   );
   await app.whenReady();
+  log.info('Playlish starting', { context: { version: app.getVersion(), electron: process.versions.electron, level: log.level } });
 
   const result = loadConfig(app.getAppPath());
   config = result.config;
@@ -345,7 +373,7 @@ async function main(): Promise<void> {
       hostOpen: hostWindow !== null && !hostWindow.isDestroyed(),
     }),
     () => pushSnapshot(),
-    (message) => log(`[error] ${message}`),
+    (message) => log.child('perf').warn(message, { code: 'PERF_LOG' }),
   );
 
   registerIpc();
