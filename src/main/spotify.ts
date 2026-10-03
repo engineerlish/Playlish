@@ -4,6 +4,10 @@
  * request queue, caching and typed responses for every endpoint.
  */
 
+import { toApiError } from './spotify/errors';
+
+export { SpotifyApiError, describeApiError } from './spotify/errors';
+
 export const API_BASE = 'https://api.spotify.com/v1';
 // CHANGE HERE: how many times to retry "device not found" right after the SDK device registers, and the wait between tries.
 // A new SDK device can take several seconds before the Web API knows about it.
@@ -20,61 +24,9 @@ export interface SpotifyDeps {
   delay?: (ms: number) => Promise<void>;
 }
 
-interface ApiErrorBody {
-  error?: { status?: number; message?: string; reason?: string };
-  status?: number;
-  message?: string;
-  reason?: string;
-}
-
-/** A failed Web API call with enough detail to show a clear message. */
-export class SpotifyApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly reason: string | undefined,
-    message: string,
-    readonly retryAfterSec?: number,
-  ) {
-    super(message);
-    this.name = 'SpotifyApiError';
-  }
-}
-
-/** Turns an API error into a plain-language message for the UI. */
-export function describeApiError(err: SpotifyApiError): string {
-  if (err.status === 429 && err.reason === 'QUOTA_EXCEEDED') {
-    return 'Your Spotify developer quota is used up (it is shared by all apps on your developer account). Try again later.';
-  }
-  if (err.status === 429) {
-    return `Spotify is rate limiting requests. Retrying in ${err.retryAfterSec ?? 'a few'} seconds.`;
-  }
-  if (err.status === 403 && err.reason === 'PREMIUM_REQUIRED') {
-    return 'Spotify Premium is required for playback.';
-  }
-  if (err.status === 401) return 'Spotify rejected the login token. Please log in again.';
-  return `Spotify error ${err.status}: ${err.message}`;
-}
-
 /** Sleeps for `ms` milliseconds. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Parses an error response into a SpotifyApiError. */
-async function toApiError(res: Response): Promise<SpotifyApiError> {
-  let body: ApiErrorBody = {};
-  try {
-    body = (await res.json()) as ApiErrorBody;
-  } catch {
-    // Non-JSON error body; fall through with defaults.
-  }
-  const retryAfter = Number(res.headers.get('Retry-After'));
-  return new SpotifyApiError(
-    res.status,
-    body.error?.reason ?? body.reason,
-    body.error?.message ?? body.message ?? res.statusText,
-    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-  );
 }
 
 /**
