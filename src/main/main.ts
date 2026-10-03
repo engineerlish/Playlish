@@ -10,6 +10,7 @@ import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
+import { startSoakDriver } from './soak-driver';
 import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
 
 /*
@@ -51,6 +52,7 @@ let playback: PlaybackState | null = null;
 let status = 'Starting…';
 let startedPlayback = false;
 let crashNotice: CrashReport | null = null;
+let uiReadyLogged = false;
 const playbackErrors = new ErrorBurstLimiter();
 // CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
 const stallRestarts = new ErrorBurstLimiter(3, 5 * 60_000);
@@ -191,6 +193,11 @@ function setStatus(text: string): void {
   pushSnapshot();
 }
 
+/** Closes the UI window (it is destroyed, not hidden). */
+function closeUi(): void {
+  if (uiWindow && !uiWindow.isDestroyed()) uiWindow.close();
+}
+
 /** Opens the UI window, or focuses it if it already exists. */
 function openUi(): void {
   if (uiWindow && !uiWindow.isDestroyed()) {
@@ -213,6 +220,12 @@ function openUi(): void {
   uiWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   uiWindow.on('closed', () => {
     uiWindow = null; // Destroyed: no renderer process remains while the app sits in the tray.
+  });
+  uiWindow.webContents.once('did-finish-load', () => {
+    if (uiReadyLogged) return;
+    uiReadyLogged = true;
+    // Milestone read by the performance harness (tools/perf): time from process start to a usable UI.
+    log.info('UI ready', { code: 'STARTUP_UI', context: { msSinceStart: Math.round(performance.now()) } });
   });
   void uiWindow.loadURL(`http://127.0.0.1:${serverPort}/ui.html`);
 }
@@ -337,6 +350,15 @@ async function playConfiguredTrack(): Promise<void> {
   }
 }
 
+/** Applies a playback state reported by the host (or simulated by the soak driver) and updates the UI. */
+function onHostState(state: PlaybackState | null): void {
+  playerLog.debug(state ? `State: paused=${String(state.paused)} position=${state.positionMs}ms` : 'State: none', {
+    code: 'PLAYER_STATE',
+  });
+  playback = state;
+  pushSnapshot();
+}
+
 /** Wires the IPC channels between main, the UI window and the playback host. */
 function registerIpc(): void {
   // Host -> main
@@ -359,13 +381,7 @@ function registerIpc(): void {
       void playConfiguredTrack();
     }
   });
-  ipcMain.on('host:state', (_event, state: PlaybackState | null) => {
-    playerLog.debug(state ? `State: paused=${String(state.paused)} position=${state.positionMs}ms` : 'State: none', {
-      code: 'PLAYER_STATE',
-    });
-    playback = state;
-    pushSnapshot();
-  });
+  ipcMain.on('host:state', (_event, state: PlaybackState | null) => onHostState(state));
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
     playerLog.error(`Player reported ${kind}: ${message}`, { code: `PLAYER_${kind.toUpperCase()}` });
     if (kind === 'stalled') {
@@ -486,6 +502,8 @@ async function main(): Promise<void> {
 
   registerIpc();
   createTray();
+  // Milestone read by the performance harness (tools/perf): time from process start to the tray icon.
+  log.info('Tray ready', { code: 'STARTUP_TRAY', context: { msSinceStart: Math.round(performance.now()) } });
 
   serverPort = result.port;
   if (config) auth = new Auth(config.clientId, redirectUriFor(config.port), { onRefreshToken: saveRefreshToken });
@@ -520,6 +538,18 @@ async function main(): Promise<void> {
     setStatus(configError ? 'Configuration needed.' : 'Not logged in.');
   }
   if (!process.argv.includes(TRAY_ONLY_FLAG)) openUi();
+
+  // Only the performance harness sets this; it repeatedly opens and closes the UI and feeds simulated playback state.
+  if (process.env['PLAYLISH_SOAK'] === '1') {
+    log.warn('Soak driver enabled (PLAYLISH_SOAK=1)', { code: 'SOAK_ENABLED' });
+    const stopSoak = startSoakDriver({
+      openUi,
+      closeUi,
+      simulateState: onHostState,
+      progress: (cycles) => log.info(`Soak cycles completed: ${cycles}`, { code: 'SOAK_PROGRESS', context: { cycles } }),
+    });
+    app.on('before-quit', stopSoak);
+  }
 }
 
 app.on('before-quit', () => metrics?.stop());
