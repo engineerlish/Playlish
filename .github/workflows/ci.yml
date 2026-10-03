@@ -86,3 +86,80 @@ jobs:
             ci-summary.md
           if-no-files-found: ignore
           retention-days: 14
+
+  perf:
+    name: Performance budgets
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Install scripts run here: the harness needs the real Electron binary.
+      - name: Install dependencies (with the Electron binary)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Idle tray
+        run: node tools/perf/run.ts --scenario idle --out perf-idle.json --no-fail
+
+      - name: UI open
+        run: node tools/perf/run.ts --scenario ui --out perf-ui.json --no-fail
+
+      - name: Baseline from main
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$id" ]; then gh run download "$id" --repo "$GITHUB_REPOSITORY" --name perf-results --dir perf-baseline || echo "No baseline on main yet."; fi
+
+      - name: Write report
+        if: always()
+        shell: bash
+        run: |
+          node tools/perf/compare.ts --current . --baseline perf-baseline > perf-summary.md
+          cat perf-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on the pull request
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('perf-summary.md')) return;
+            const body = fs.readFileSync('perf-summary.md', 'utf8');
+            const marker = '<!-- playlish-perf-summary -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      # Results from main become the baseline that pull requests compare against.
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-results
+          path: |
+            perf-idle.json
+            perf-ui.json
+            perf-summary.md
+          if-no-files-found: ignore
+          retention-days: 90
