@@ -359,6 +359,21 @@ describe('Auth: access tokens and refresh', () => {
     expect(fetchMock).not.toHaveBeenCalled(); // does not keep hammering Spotify with a dead token
   });
 
+  it('tells the caller when Spotify rejects the refresh token, and not for transient errors', async () => {
+    const expired: number[] = [];
+    const fetchMock = vi.fn<typeof fetch>();
+    const auth = new Auth(CLIENT_ID, REDIRECT_URI, { fetch: fetchMock, onSessionExpired: () => expired.push(1) });
+    auth.restore('saved');
+
+    fetchMock.mockResolvedValueOnce(errorResponse(502, 'bad gateway'));
+    await expect(auth.getAccessToken()).rejects.toThrow('502');
+    expect(expired).toEqual([]);
+
+    fetchMock.mockResolvedValueOnce(errorResponse(400, { error: 'invalid_grant' }));
+    await expect(auth.getAccessToken()).rejects.toBeInstanceOf(SessionExpiredError);
+    expect(expired).toEqual([1]);
+  });
+
   it.each([
     ['a 5xx response', () => Promise.resolve(errorResponse(502, 'bad gateway')), '502'],
     ['a network failure', () => Promise.reject(new TypeError('fetch failed')), 'fetch failed'],

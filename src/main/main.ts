@@ -11,6 +11,7 @@ import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIss
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
 import { SettingsStore } from './settings';
+import { TokenStore } from './token-store';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
 
@@ -54,34 +55,11 @@ let status = 'Starting…';
 let startedPlayback = false;
 let crashNotice: CrashReport | null = null;
 let settings: SettingsStore | null = null;
+let tokens: TokenStore | null = null;
 let uiReadyLogged = false;
 const playbackErrors = new ErrorBurstLimiter();
 // CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
 const stallRestarts = new ErrorBurstLimiter(3, 5 * 60_000);
-
-/** Path of the encrypted session file (spike only; the MVP stores tokens in Windows Credential Manager). */
-function sessionFile(): string {
-  return path.join(app.getPath('userData'), 'session.bin');
-}
-
-/** Saves the refresh token encrypted with Windows DPAPI (safeStorage); never written in plain text. */
-function saveRefreshToken(token: string): void {
-  try {
-    if (safeStorage.isEncryptionAvailable()) fs.writeFileSync(sessionFile(), safeStorage.encryptString(token));
-  } catch (err) {
-    authLog.error('Could not save the session', { code: 'SESSION_SAVE_FAILED', error: err });
-  }
-}
-
-/** Loads the saved refresh token, or null if there is none or it can't be decrypted. */
-function loadRefreshToken(): string | null {
-  try {
-    if (!fs.existsSync(sessionFile()) || !safeStorage.isEncryptionAvailable()) return null;
-    return safeStorage.decryptString(fs.readFileSync(sessionFile()));
-  } catch {
-    return null;
-  }
-}
 
 /** File remembering which crash reports the user has already been asked about. */
 function diagnosticsStateFile(): string {
@@ -316,6 +294,19 @@ function restartHost(): void {
   createHostWindow();
 }
 
+/** Forgets the session everywhere: in memory, on disk, and in the playback host. */
+function signOut(): void {
+  auth?.clear();
+  tokens?.clear();
+  hostWindow?.destroy();
+  hostWindow = null;
+  deviceId = null;
+  playback = null;
+  startedPlayback = false;
+  authLog.info('Signed out', { code: 'SIGNED_OUT' });
+  setStatus('Signed out.');
+}
+
 /** Runs the browser login, then starts the playback host. Errors are shown in the status line. */
 async function login(): Promise<void> {
   if (!auth) return;
@@ -413,6 +404,7 @@ function registerIpc(): void {
   ipcMain.on('ui:login', () => void login());
   ipcMain.on('ui:request-snapshot', () => pushSnapshot());
   ipcMain.on('ui:export-diagnostics', () => void exportDiagnostics());
+  ipcMain.on('ui:sign-out', () => signOut());
   ipcMain.on('ui:report-issue', () => {
     openIssue(
       buildIssueUrl({
@@ -485,6 +477,8 @@ async function main(): Promise<void> {
     (err: unknown) => widevineLog.error('Widevine CDM failed to load', { code: 'WIDEVINE_NOT_READY', error: err }),
   );
   await app.whenReady();
+  // Only the refresh token is stored, encrypted with safeStorage (DPAPI); see token-store.ts and #51.
+  tokens = new TokenStore(app.getPath('userData'), safeStorage, (message) => authLog.warn(message, { code: 'TOKEN_STORE' }));
   const settingsLog = log.child('settings');
   settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'), {
     report: (message) => settingsLog.warn(message, { code: 'SETTINGS' }),
@@ -512,7 +506,16 @@ async function main(): Promise<void> {
   log.info('Tray ready', { code: 'STARTUP_TRAY', context: { msSinceStart: Math.round(performance.now()) } });
 
   serverPort = result.port;
-  if (config) auth = new Auth(config.clientId, redirectUriFor(config.port), { onRefreshToken: saveRefreshToken });
+  if (config) {
+    const clientId = config.clientId;
+    auth = new Auth(clientId, redirectUriFor(config.port), {
+      onRefreshToken: (token) => tokens?.save(clientId, token),
+      onSessionExpired: () => {
+        tokens?.clear();
+        authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
+      },
+    });
+  }
   try {
     // The server always starts so the UI window can load and explain configuration problems.
     await startServer({
@@ -535,7 +538,7 @@ async function main(): Promise<void> {
   const newestCrash = logging.crashes.list()[0];
   const report = newestCrash ? logging.crashes.read(newestCrash) : null;
   crashNotice = unseenCrash(report ? [report] : [], seenCrashIds());
-  const saved = auth ? loadRefreshToken() : null;
+  const saved = auth && config ? (tokens?.load(config.clientId) ?? null) : null;
   if (auth && saved) {
     auth.restore(saved);
     setStatus('Restoring your session…');
