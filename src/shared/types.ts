@@ -36,6 +36,52 @@ export interface MetricsSample {
   cpuPercent: number;
 }
 
+/* ----- first-run setup (#40) ----- */
+
+export type SetupStep = 'welcome' | 'create-app' | 'client-id' | 'login' | 'player-check' | 'done';
+
+export type SetupErrorCode =
+  | 'client-id-format'
+  | 'login-cancelled'
+  | 'login-timeout'
+  | 'login-refused'
+  | 'login-failed'
+  | 'not-premium'
+  | 'player-auth'
+  | 'player-failed';
+
+export interface SetupError {
+  code: SetupErrorCode;
+  message: string;
+  /** Things to check, most likely first. */
+  hints: string[];
+}
+
+/** Everything the window needs to draw the current step. */
+export interface SetupView {
+  step: SetupStep;
+  stepNumber: number;
+  stepCount: number;
+  redirectUri: string;
+  clientId: string;
+  clientIdValid: boolean;
+  busy: boolean;
+  error: SetupError | null;
+  /** Shown while waiting for the browser: Spotify's own error pages never come back to Playlish. */
+  waitingHints: string[];
+}
+
+export type SetupAction =
+  | { type: 'next' }
+  | { type: 'back' }
+  | { type: 'open-dashboard' }
+  | { type: 'copy-redirect-uri' }
+  | { type: 'set-client-id'; value: string }
+  | { type: 'login' }
+  | { type: 'cancel-login' }
+  | { type: 'retry' }
+  | { type: 'finish' };
+
 /** Everything the UI window needs to draw itself, pushed from main whenever something changes. */
 export interface Snapshot {
   status: string;
@@ -47,6 +93,8 @@ export interface Snapshot {
   perfLogPath: string;
   /** Set after a crash the user has not been asked about yet. */
   crashNotice: { when: string; process: string; kind: string } | null;
+  /** The first-run wizard, while setup is not finished; null otherwise. */
+  setup: SetupView | null;
 }
 
 /** API exposed to the playback host page by its preload script. */
@@ -68,6 +116,8 @@ export interface UiApi {
   command(command: UiCommand): void;
   onSnapshot(callback: (snapshot: Snapshot) => void): void;
   requestSnapshot(): void;
+  /** Sends an action to the first-run wizard. */
+  setup(action: SetupAction): void;
   /** Signs out: deletes the stored session and stops the player. */
   signOut(): void;
   /** Saves a redacted diagnostics file chosen by the user. */
