@@ -2,14 +2,23 @@ import { createHash, randomBytes } from 'node:crypto';
 
 export const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
 export const TOKEN_URL = 'https://accounts.spotify.com/api/token';
-// CHANGE HERE: scopes requested at login. The Web Playback SDK rejects tokens without `streaming`, `user-read-email` and
-// `user-read-private` ("Invalid token scopes"); the other two let us control playback through the Web API.
+// CHANGE HERE: scopes requested at login.
+// - The Web Playback SDK rejects tokens without `streaming`, `user-read-email` and `user-read-private`.
+// - Playback state and control, the queue and the currently playing item: `user-read-playback-state`,
+//   `user-modify-playback-state`, `user-read-currently-playing`.
+// - Library, saving and checking saved items: `user-library-read`, `user-library-modify`.
+// - The user's own and collaborative playlists: `playlist-read-private`, `playlist-read-collaborative`.
 export const SCOPES = [
   'streaming',
   'user-read-email',
   'user-read-private',
   'user-read-playback-state',
   'user-modify-playback-state',
+  'user-read-currently-playing',
+  'user-library-read',
+  'user-library-modify',
+  'playlist-read-private',
+  'playlist-read-collaborative',
 ];
 // CHANGE HERE: how long we wait for the user to finish logging in in the browser.
 export const LOGIN_TIMEOUT_MS = 5 * 60_000;
@@ -20,6 +29,8 @@ interface TokenResponse {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
+  /** Space-separated scopes Spotify granted. */
+  scope?: string;
 }
 
 interface PendingLogin {
@@ -65,6 +76,8 @@ export class Auth {
   private expiresAtMs = 0;
   private pending: PendingLogin | null = null;
   private refreshing: Promise<string> | null = null;
+  /** Scopes Spotify reported for the current token, or null if it has not said yet. */
+  private granted: Set<string> | null = null;
 
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
@@ -92,6 +105,16 @@ export class Auth {
     this.accessToken = null;
     this.refreshToken = null;
     this.expiresAtMs = 0;
+    this.granted = null;
+  }
+
+  /**
+   * Scopes Playlish asks for that the current login did not grant (for example a login from before a new feature
+   * needed them). Empty when everything is granted or when Spotify has not reported scopes yet.
+   */
+  missingScopes(): string[] {
+    const granted = this.granted;
+    return granted ? SCOPES.filter((s) => !granted.has(s)) : [];
   }
 
   /** True once a login has produced a refresh token. */
@@ -201,6 +224,7 @@ export class Auth {
   /** Stores a token response; Spotify may or may not rotate the refresh token. */
   private applyToken(token: TokenResponse): void {
     this.accessToken = token.access_token;
+    if (typeof token.scope === 'string') this.granted = new Set(token.scope.split(/\s+/).filter(Boolean));
     if (token.refresh_token) {
       this.refreshToken = token.refresh_token;
       this.onRefreshToken(token.refresh_token);

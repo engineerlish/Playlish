@@ -1,0 +1,126 @@
+{
+  "href": "https://api.spotify.com/v1/playlists/playlist0000000000001/items?offset=0&limit=50",
+  "items": [
+    {
+      "added_at": "2026-09-02T10:00:00Z",
+      "added_by": {
+        "id": "fixtureuser"
+      },
+      "is_local": false,
+      "item": {
+        "id": "track00000000000000005",
+        "name": "Fixture Track 5",
+        "uri": "spotify:track:track00000000000000005",
+        "type": "track",
+        "duration_ms": 185000,
+        "explicit": false,
+        "is_local": false,
+        "is_playable": true,
+        "track_number": 1,
+        "disc_number": 1,
+        "artists": [
+          {
+            "id": "artist0000000000000000",
+            "name": "Fixture Artist 5",
+            "uri": "spotify:artist:artist0000000000000000",
+            "type": "artist",
+            "href": "https://api.spotify.com/v1/artists/x",
+            "external_urls": {
+              "spotify": "https://open.spotify.com/artist/x"
+            }
+          }
+        ],
+        "album": {
+          "id": "album00000000000000005",
+          "name": "Fixture Album 5",
+          "uri": "spotify:album:album00000000000000005",
+          "type": "album",
+          "album_type": "album",
+          "images": [
+            {
+              "url": "https://i.scdn.co/image/fixture640",
+              "height": 640,
+              "width": 640
+            },
+            {
+              "url": "https://i.scdn.co/image/fixture300",
+              "height": 300,
+              "width": 300
+            },
+            {
+              "url": "https://i.scdn.co/image/fixture64",
+              "height": 64,
+              "width": 64
+            }
+          ],
+          "artists": [
+            {
+              "id": "artist0000000000000000",
+              "name": "Fixture Artist 5",
+              "uri": "spotify:artist:artist0000000000000000",
+              "type": "artist",
+              "href": "https://api.spotify.com/v1/artists/x",
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/x"
+              }
+            }
+          ],
+          "release_date": "2025-05-01",
+          "total_tracks": 10,
+          "href": "https://api.spotify.com/v1/albums/x",
+          "external_urls": {
+            "spotify": "https://open.spotify.com/album/x"
+          }
+        },
+        "href": "https://api.spotify.com/v1/tracks/x",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/track/x"
+        }
+      }
+    },
+    {
+      "added_at": "2026-09-03T10:00:00Z",
+      "added_by": {
+        "id": "fixtureuser"
+      },
+      "is_local": false,
+      "item": {
+        "id": "episode000000000000006",
+        "name": "Fixture Episode 6",
+        "uri": "spotify:episode:episode000000000000006",
+        "type": "episode",
+        "duration_ms": 1800000,
+        "images": [
+          {
+            "url": "https://i.scdn.co/image/fixture640",
+            "height": 640,
+            "width": 640
+          }
+        ],
+        "show": {
+          "id": "show000000000000000006",
+          "name": "Fixture Show",
+          "uri": "spotify:show:show000000000000000006",
+          "images": [
+            {
+              "url": "https://i.scdn.co/image/fixture640",
+              "height": 640,
+              "width": 640
+            }
+          ]
+        }
+      }
+    },
+    {
+      "added_at": null,
+      "added_by": null,
+      "is_local": false,
+      "item": null
+    }
+  ],
+  "limit": 50,
+  "next": null,
+  "offset": 0,
+  "previous": null,
+  "total": 3
+}

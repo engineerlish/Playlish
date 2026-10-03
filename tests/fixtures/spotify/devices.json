@@ -1,0 +1,24 @@
+{
+  "devices": [
+    {
+      "id": "devicefixture000000000000000000000000001",
+      "name": "Playlish",
+      "type": "Computer",
+      "is_active": true,
+      "is_private_session": false,
+      "is_restricted": false,
+      "volume_percent": 50,
+      "supports_volume": true
+    },
+    {
+      "id": "devicefixture000000000000000000000000002",
+      "name": "Phone",
+      "type": "Smartphone",
+      "is_active": false,
+      "is_private_session": false,
+      "is_restricted": false,
+      "volume_percent": 80,
+      "supports_volume": true
+    }
+  ]
+}

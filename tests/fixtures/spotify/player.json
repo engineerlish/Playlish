@@ -1,0 +1,92 @@
+{
+  "device": {
+    "id": "devicefixture000000000000000000000000001",
+    "name": "Playlish",
+    "type": "Computer",
+    "is_active": true,
+    "is_private_session": false,
+    "is_restricted": false,
+    "volume_percent": 50,
+    "supports_volume": true
+  },
+  "repeat_state": "off",
+  "shuffle_state": false,
+  "context": {
+    "uri": "spotify:playlist:playlist0000000000001",
+    "type": "playlist"
+  },
+  "timestamp": 1791000000000,
+  "progress_ms": 42000,
+  "is_playing": true,
+  "item": {
+    "id": "track00000000000000001",
+    "name": "Fixture Track 1",
+    "uri": "spotify:track:track00000000000000001",
+    "type": "track",
+    "duration_ms": 181000,
+    "explicit": false,
+    "is_local": false,
+    "is_playable": true,
+    "track_number": 1,
+    "disc_number": 1,
+    "artists": [
+      {
+        "id": "artist0000000000000000",
+        "name": "Fixture Artist 1",
+        "uri": "spotify:artist:artist0000000000000000",
+        "type": "artist",
+        "href": "https://api.spotify.com/v1/artists/x",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/artist/x"
+        }
+      }
+    ],
+    "album": {
+      "id": "album00000000000000001",
+      "name": "Fixture Album 1",
+      "uri": "spotify:album:album00000000000000001",
+      "type": "album",
+      "album_type": "album",
+      "images": [
+        {
+          "url": "https://i.scdn.co/image/fixture640",
+          "height": 640,
+          "width": 640
+        },
+        {
+          "url": "https://i.scdn.co/image/fixture300",
+          "height": 300,
+          "width": 300
+        },
+        {
+          "url": "https://i.scdn.co/image/fixture64",
+          "height": 64,
+          "width": 64
+        }
+      ],
+      "artists": [
+        {
+          "id": "artist0000000000000000",
+          "name": "Fixture Artist 1",
+          "uri": "spotify:artist:artist0000000000000000",
+          "type": "artist",
+          "href": "https://api.spotify.com/v1/artists/x",
+          "external_urls": {
+            "spotify": "https://open.spotify.com/artist/x"
+          }
+        }
+      ],
+      "release_date": "2025-05-01",
+      "total_tracks": 10,
+      "href": "https://api.spotify.com/v1/albums/x",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/album/x"
+      }
+    },
+    "href": "https://api.spotify.com/v1/tracks/x",
+    "external_urls": {
+      "spotify": "https://open.spotify.com/track/x"
+    }
+  },
+  "currently_playing_type": "track"
+}

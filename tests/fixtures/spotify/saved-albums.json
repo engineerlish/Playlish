@@ -1,0 +1,100 @@
+{
+  "href": "https://api.spotify.com/v1/me/albums?offset=0&limit=50",
+  "items": [
+    {
+      "added_at": "2026-09-01T10:00:00Z",
+      "album": {
+        "id": "album00000000000000001",
+        "name": "Fixture Album 1",
+        "uri": "spotify:album:album00000000000000001",
+        "type": "album",
+        "album_type": "album",
+        "images": [
+          {
+            "url": "https://i.scdn.co/image/fixture640",
+            "height": 640,
+            "width": 640
+          },
+          {
+            "url": "https://i.scdn.co/image/fixture300",
+            "height": 300,
+            "width": 300
+          },
+          {
+            "url": "https://i.scdn.co/image/fixture64",
+            "height": 64,
+            "width": 64
+          }
+        ],
+        "artists": [
+          {
+            "id": "artist0000000000000000",
+            "name": "Fixture Artist 1",
+            "uri": "spotify:artist:artist0000000000000000",
+            "type": "artist",
+            "href": "https://api.spotify.com/v1/artists/x",
+            "external_urls": {
+              "spotify": "https://open.spotify.com/artist/x"
+            }
+          }
+        ],
+        "release_date": "2025-05-01",
+        "total_tracks": 10,
+        "href": "https://api.spotify.com/v1/albums/x",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/album/x"
+        }
+      }
+    },
+    {
+      "added_at": "2026-09-01T10:00:00Z",
+      "album": {
+        "id": "album00000000000000002",
+        "name": "Fixture Album 2",
+        "uri": "spotify:album:album00000000000000002",
+        "type": "album",
+        "album_type": "album",
+        "images": [
+          {
+            "url": "https://i.scdn.co/image/fixture640",
+            "height": 640,
+            "width": 640
+          },
+          {
+            "url": "https://i.scdn.co/image/fixture300",
+            "height": 300,
+            "width": 300
+          },
+          {
+            "url": "https://i.scdn.co/image/fixture64",
+            "height": 64,
+            "width": 64
+          }
+        ],
+        "artists": [
+          {
+            "id": "artist0000000000000000",
+            "name": "Fixture Artist 2",
+            "uri": "spotify:artist:artist0000000000000000",
+            "type": "artist",
+            "href": "https://api.spotify.com/v1/artists/x",
+            "external_urls": {
+              "spotify": "https://open.spotify.com/artist/x"
+            }
+          }
+        ],
+        "release_date": "2025-05-01",
+        "total_tracks": 10,
+        "href": "https://api.spotify.com/v1/albums/x",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/album/x"
+        }
+      }
+    }
+  ],
+  "limit": 50,
+  "next": null,
+  "offset": 0,
+  "previous": null,
+  "total": 2
+}

@@ -1,0 +1,66 @@
+{
+  "href": "https://api.spotify.com/v1/me/playlists?offset=0&limit=50",
+  "items": [
+    {
+      "id": "playlist0000000000001",
+      "name": "Fixture Playlist",
+      "uri": "spotify:playlist:playlist0000000000001",
+      "type": "playlist",
+      "images": [
+        {
+          "url": "https://i.scdn.co/image/fixture640",
+          "height": 640,
+          "width": 640
+        }
+      ],
+      "owner": {
+        "id": "fixtureuser",
+        "display_name": "Fixture User",
+        "type": "user",
+        "uri": "spotify:user:fixtureuser"
+      },
+      "snapshot_id": "snapshot-1",
+      "collaborative": false,
+      "public": false,
+      "description": "For tests",
+      "items": {
+        "href": "https://api.spotify.com/v1/playlists/playlist0000000000001/items",
+        "total": 3
+      },
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/playlist0000000000001/tracks",
+        "total": 3
+      }
+    },
+    {
+      "id": "playlist0000000000002",
+      "name": "Someone Else",
+      "uri": "spotify:playlist:playlist0000000000002",
+      "type": "playlist",
+      "images": null,
+      "owner": {
+        "id": "someoneelse",
+        "display_name": "Someone Else",
+        "type": "user",
+        "uri": "spotify:user:someoneelse"
+      },
+      "snapshot_id": "snapshot-1",
+      "collaborative": false,
+      "public": false,
+      "description": "For tests",
+      "items": {
+        "href": "https://api.spotify.com/v1/playlists/playlist0000000000001/items",
+        "total": 3
+      },
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/playlist0000000000001/tracks",
+        "total": 3
+      }
+    }
+  ],
+  "limit": 50,
+  "next": null,
+  "offset": 0,
+  "previous": null,
+  "total": 2
+}
