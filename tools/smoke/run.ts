@@ -10,7 +10,7 @@
  * audio meter to tell sound from silence, writes a report to smoke-results/, and can file issues for failures after
  * showing you exactly what it would file. Node 24 runs this TypeScript file directly.
  */
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, execSync, spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as os from 'node:os';
@@ -139,7 +139,7 @@ function preconditions(): boolean {
   try {
     const out = execFileSync('py', ['-3.9', '-m', 'castlabs_evs.vmp', 'verify-pkg', path.join(ROOT, 'node_modules', 'electron', 'dist')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     vmp = out.includes('Signature is valid')
-      ? { ...vmp, status: 'pass', details: out.trim().split(/\r?\n/).pop() ?? '' }
+      ? { ...vmp, status: 'pass', details: (out.trim().split(/\r?\n/).pop() ?? '').replace(/^\s*-\s*/, '') }
       : { ...vmp, status: 'fail', details: out.trim() };
   } catch (err) {
     const e = err as { stderr?: Buffer | string; message?: string };
@@ -149,7 +149,7 @@ function preconditions(): boolean {
   record(vmp);
 
   try {
-    execFileSync('npm', ['run', 'build'], { cwd: ROOT, stdio: 'ignore', shell: true });
+    execSync('npm run build', { cwd: ROOT, stdio: 'ignore' });
     record({ id: 'build', name: 'App builds', status: 'pass', details: '', area: 'ui', severity: 'high' });
   } catch {
     record({ id: 'build', name: 'App builds', status: 'fail', details: 'npm run build failed', area: 'ui', severity: 'high' });

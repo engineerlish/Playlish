@@ -2,7 +2,8 @@
 # output device over a short window. Used by the smoke test to tell real sound from silence without anyone listening.
 # Output: one JSON object, for example {"peak":0.35,"sessions":[{"pid":1234,"active":true,"volume":1,"muted":false,"peak":0.35}]}
 param(
-  [Parameter(Mandatory = $true)][int[]]$ProcessIds,
+  # Comma-separated process ids (a string, because powershell -File passes "1,2,3" as one argument).
+  [Parameter(Mandatory = $true)][string]$ProcessIds,
   [int]$Milliseconds = 2000   # CHANGE HERE: how long to watch the meter
 )
 
@@ -57,7 +58,7 @@ public static class PlaylishAudioMeter {
 "@
 
 $set = New-Object 'System.Collections.Generic.HashSet[uint32]'
-foreach ($id in $ProcessIds) { [void]$set.Add([uint32]$id) }
+foreach ($id in ($ProcessIds -split '[,\s]+' | Where-Object { $_ })) { [void]$set.Add([uint32]$id) }
 $sessions = [PlaylishAudioMeter]::Measure($set, $Milliseconds)
 $peak = 0.0; foreach ($s in $sessions) { if ($s.Peak -gt $peak) { $peak = $s.Peak } }
 [pscustomobject]@{
