@@ -30,6 +30,55 @@
 
   <div class="panel" id="configPanel" hidden></div>
 
+  <div class="panel" id="setupPanel" hidden>
+    <div class="muted" id="setupProgress"></div>
+    <section data-step="welcome">
+      <h2>Welcome to Playlish</h2>
+      <p>Playlish plays Spotify with your own free Spotify developer app, so it needs a few minutes of setup.</p>
+      <ul>
+        <li>Spotify Premium (playback needs it).</li>
+        <li>A Spotify developer account: free, same login as Spotify.</li>
+      </ul>
+    </section>
+    <section data-step="create-app">
+      <h2>Create your Spotify app</h2>
+      <ol>
+        <li>Open the dashboard and log in: <button id="openDashboard">Open Spotify dashboard</button></li>
+        <li>Choose <strong>Create app</strong>. Any name and description will do.</li>
+        <li>Add this Redirect URI exactly: <code id="redirectUri"></code> <button id="copyRedirect">Copy</button></li>
+        <li>Tick <strong>Web API</strong> and <strong>Web Playback SDK</strong>, accept the terms, and save.</li>
+        <li>Open the app's <strong>Settings</strong> and copy the <strong>Client ID</strong>. Never share the Client secret; Playlish does not use it.</li>
+      </ol>
+    </section>
+    <section data-step="client-id">
+      <h2>Paste your Client ID</h2>
+      <input id="clientIdInput" autocomplete="off" spellcheck="false" placeholder="32 characters, 0-9 and a-f" style="width:100%;font:inherit;padding:6px">
+      <div id="clientIdState" class="muted"></div>
+    </section>
+    <section data-step="login">
+      <h2>Log in with Spotify</h2>
+      <p>Your browser opens Spotify's login page. Come back here when it says you can close the tab.</p>
+      <ul id="waitingHints" class="muted"></ul>
+    </section>
+    <section data-step="player-check">
+      <h2>Starting the player</h2>
+      <p>Checking that Spotify accepts this account for playback.</p>
+    </section>
+    <section data-step="done">
+      <h2>All set</h2>
+      <p>Playlish is ready. You can change these settings later.</p>
+    </section>
+    <div id="setupError" hidden style="margin-top:8px"><strong id="setupErrorText"></strong><ul id="setupHints"></ul></div>
+    <div class="row" style="margin-top:8px">
+      <button id="setupBack">Back</button>
+      <button id="setupNext" class="primary">Next</button>
+      <button id="setupLogin" class="primary">Log in with Spotify</button>
+      <button id="setupCancel">Cancel</button>
+      <button id="setupRetry" class="primary">Try again</button>
+      <button id="setupFinish" class="primary">Start using Playlish</button>
+    </div>
+  </div>
+
   <div class="panel" id="crashPanel" hidden>
     <div id="crashText"></div>
     <div class="row" style="margin-top:8px">

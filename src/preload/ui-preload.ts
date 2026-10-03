@@ -9,6 +9,7 @@ const api: UiApi = {
     ipcRenderer.on('ui:snapshot', (_event, snapshot: Snapshot) => callback(snapshot));
   },
   requestSnapshot: () => ipcRenderer.send('ui:request-snapshot'),
+  setup: (action) => ipcRenderer.send('ui:setup', action),
   signOut: () => ipcRenderer.send('ui:sign-out'),
   exportDiagnostics: () => ipcRenderer.send('ui:export-diagnostics'),
   reportIssue: () => ipcRenderer.send('ui:report-issue'),

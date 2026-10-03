@@ -157,10 +157,24 @@ function preconditions(): boolean {
   }
 
   const require = createRequire(import.meta.url);
-  const { loadConfig } = require(path.join(ROOT, 'dist', 'main', 'config.js')) as { loadConfig: (root: string) => { error: string | null } };
-  const config = loadConfig(ROOT);
-  record({ id: 'config', name: 'spike.config.json is valid', status: config.error ? 'fail' : 'pass', details: config.error ?? '', area: 'auth', severity: 'high' });
-  return config.error === null;
+  const { resolveClientId } = require(path.join(ROOT, 'dist', 'main', 'config.js')) as { resolveClientId: (env: string | undefined, saved: string | null) => string | null };
+  let saved: string | null = null;
+  try {
+    saved = (JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')) as { clientId?: string | null }).clientId ?? null;
+  } catch {
+    // No settings yet.
+  }
+  const legacy = fs.existsSync(path.join(ROOT, 'spike.config.json'));
+  const configured = resolveClientId(process.env['PLAYLISH_CLIENT_ID'], saved) !== null || legacy;
+  record({
+    id: 'config',
+    name: 'Client ID configured',
+    status: configured ? 'pass' : 'fail',
+    details: configured ? (legacy ? 'spike.config.json found; the app imports it on start' : '') : 'Run Playlish once and finish the setup wizard first',
+    area: 'auth',
+    severity: 'high',
+  });
+  return configured;
 }
 
 /** Starts the app with the DevTools port and checks login, playback and audio. */
@@ -236,6 +250,21 @@ async function playbackChecks(): Promise<void> {
   await sleep(2500);
   const back = bestOf(2, 2000);
   record({ id: 'fade', name: 'Fade pause and fade resume', status: faded < SILENCE && back > SOUND ? 'pass' : 'fail', details: `after fade-out ${faded}, after fade-in ${back}`, area: 'audio', severity: 'medium' });
+
+  // The login must survive a restart (a bug once deleted the stored session on every start).
+  stopApp();
+  await sleep(2000);
+  const restartOffset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
+  app = spawn(EXE, ['.', `--user-data-dir=${profile}`, `--remote-debugging-port=${DEVTOOLS_PORT}`], { cwd: ROOT, stdio: 'ignore' });
+  const afterRestart = await waitForLog(restartOffset, /Status: (Restoring your session|Not logged in|Welcome to Playlish)/, 30_000);
+  record({
+    id: 'restart',
+    name: 'Login survives a restart',
+    status: afterRestart && /Restoring your session/.test(afterRestart) ? 'pass' : 'fail',
+    details: afterRestart ? (/Restoring/.test(afterRestart) ? '' : 'Playlish asked to log in again after a restart') : 'No status within 30 s after the restart',
+    area: 'auth',
+    severity: 'high',
+  });
 }
 
 /** Steps for features that do not exist yet; they become real checks as the MVP lands. */
