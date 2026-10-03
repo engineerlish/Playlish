@@ -13,7 +13,8 @@ import { resultPage, startServer } from './server';
 import { SettingsStore } from './settings';
 import { TokenStore } from './token-store';
 import { startSoakDriver } from './soak-driver';
-import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
+import { SpotifyClient } from './spotify/client';
+import { SpotifyApiError, describeApiError } from './spotify/errors';
 import { RequestQueue } from './spotify/queue';
 
 /*
@@ -59,6 +60,8 @@ let settings: SettingsStore | null = null;
 let tokens: TokenStore | null = null;
 // Every Web API call goes through this queue: priorities, Retry-After and the quota pause (#41).
 const apiQueue = new RequestQueue();
+let spotify: SpotifyClient | null = null;
+let warnedAboutScopes = false;
 let uiReadyLogged = false;
 const playbackErrors = new ErrorBurstLimiter();
 // CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
@@ -300,6 +303,8 @@ function restartHost(): void {
 /** Forgets the session everywhere: in memory, on disk, and in the playback host. */
 function signOut(): void {
   auth?.clear();
+  spotify?.clearCache();
+  warnedAboutScopes = false;
   tokens?.clear();
   hostWindow?.destroy();
   hostWindow = null;
@@ -330,16 +335,9 @@ async function playConfiguredTrack(): Promise<void> {
     // One command only. The play call carries the device id, which also makes it the active device. A separate transfer
     // before it made the SDK start loading the account's remembered track and then abort that load when play arrived
     // (net::ERR_ABORTED on the first audio request), leaving some launches silent (#17). 404s while the new device is
-    // still unknown to the Web API are retried inside startPlayback.
+    // still unknown to the Web API are retried by the client.
     setStatus('Connecting the player to your account…');
-    const session = auth;
-    const device = deviceId;
-    const track = config.trackUri;
-    await apiQueue.run({
-      priority: 'user',
-      endpoint: 'PUT /me/player/play',
-      run: async () => startPlayback(await session.getAccessToken(), device, track),
-    });
+    await spotify?.play({ deviceId, uris: [config.trackUri] });
     setStatus('Playing.');
   } catch (err) {
     playerLog.error('Could not start playback', {
@@ -367,7 +365,14 @@ function registerIpc(): void {
   // Host -> main
   ipcMain.handle('host:get-token', async () => {
     if (!auth) throw new Error('Not configured');
-    return auth.getAccessToken();
+    const token = await auth.getAccessToken();
+    const missing = auth.missingScopes();
+    if (missing.length > 0 && !warnedAboutScopes) {
+      warnedAboutScopes = true;
+      authLog.warn('The current login lacks permissions Playlish now needs', { code: 'SCOPES_MISSING', context: { missing } });
+      setStatus('Playlish needs a few new Spotify permissions. Please log in again to grant them.');
+    }
+    return token;
   });
   ipcMain.on('host:log', (_event, message: string) => hostLog.info(message));
   ipcMain.on('renderer:error', (_event, source: string, message: string, stack?: string) => {
@@ -518,13 +523,15 @@ async function main(): Promise<void> {
   serverPort = result.port;
   if (config) {
     const clientId = config.clientId;
-    auth = new Auth(clientId, redirectUriFor(config.port), {
+    const session = new Auth(clientId, redirectUriFor(config.port), {
       onRefreshToken: (token) => tokens?.save(clientId, token),
       onSessionExpired: () => {
         tokens?.clear();
         authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
       },
     });
+    auth = session;
+    spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue });
   }
   try {
     // The server always starts so the UI window can load and explain configuration problems.

@@ -390,6 +390,30 @@ describe('Auth: access tokens and refresh', () => {
     await expect(auth.getAccessToken()).resolves.toBe('recovered');
   });
 
+  it('reports scopes the current login did not grant, once Spotify has said which it granted', async () => {
+    const { auth, fetchMock } = setup();
+    auth.restore('old-login');
+    expect(auth.missingScopes()).toEqual([]); // nothing reported yet
+
+    const oldScopes = 'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state';
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'a', expires_in: 3600, scope: oldScopes }), { status: 200 }));
+    await auth.getAccessToken();
+
+    expect(auth.missingScopes()).toEqual(SCOPES.filter((s) => !oldScopes.split(' ').includes(s)));
+    expect(auth.missingScopes()).toContain('user-library-read');
+  });
+
+  it('reports nothing missing when every scope was granted, and forgets on clear()', async () => {
+    const { auth, fetchMock } = setup();
+    auth.restore('new-login');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'a', expires_in: 3600, scope: SCOPES.join(' ') }), { status: 200 }));
+    await auth.getAccessToken();
+    expect(auth.missingScopes()).toEqual([]);
+
+    auth.clear();
+    expect(auth.missingScopes()).toEqual([]);
+  });
+
   it('restores a saved session and refreshes on first use', async () => {
     const { auth, fetchMock } = setup();
     auth.restore('saved-refresh-token');

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Typed Spotify client for every endpoint the MVP needs (profile, playback state and commands, devices, transfer, queue, saved tracks and albums, playlists and their items, search, saving to and removing from the library), in the current API shapes, with response shape checks, the request queue and caching. Integration tests against a fake Spotify server with fixtures.
 - Shared request queue for every Spotify Web API call: user actions first, then visible pages, then background work; at most two requests at a time; identical requests in flight share one call; a rate limit pauses everything until Retry-After and retries; a used-up quota pauses background work for 10 minutes. Small response cache with expiry and a size cap.
 - Sign out button: deletes the stored session and stops the player.
 - `tools/audit/scan-profile.ps1` checks a profile folder for secrets stored in plain text (prints only file names and counts).
@@ -30,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Playlish now asks for the Spotify permissions the library, playlists and queue need. A login from before this change keeps playing and is asked to log in again once to grant them.
 - The refresh token is stored in `refresh-token.bin`, encrypted with Electron's safeStorage (Windows DPAPI) and bound to the Client ID it was issued for; the access token is kept in memory only. The spike's `session.bin` is migrated once and removed only after the new file is verified. A refresh token Spotify rejects is deleted.
 - The Spotify API client takes injectable `fetch`, base URL and delay, and the two playback calls share one retry routine.
 - `Auth` accepts an injected `fetch` and clock so it can be tested without network access.
