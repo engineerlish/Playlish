@@ -1,0 +1,9 @@
+{
+  "$comment": "Budgets from docs/PROPOSAL.md section 2. Memory is private bytes summed over all app processes. uiOpenPrivateMb is the UI window open while not playing (the proposal's 300 MB is for open and playing).",
+  "idleTrayPrivateMb": 80,
+  "uiOpenPrivateMb": 150,
+  "idleCpuPercent": 0.1,
+  "coldStartTrayMs": 1500,
+  "coldStartUiMs": 2500,
+  "soakMaxGrowthPercent": 5
+}
