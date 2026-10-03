@@ -3,15 +3,14 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": [],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "sourceMap": true,
-    "rootDir": "src",
-    "outDir": "dist/web"
+    "noEmit": true
   },
-  "include": ["src/renderer/**/*.ts", "src/shared/**/*.ts"],
-  "exclude": ["src/renderer/ui/**"]
+  "include": ["src/renderer/ui/**/*.ts", "src/renderer/ui/**/*.tsx", "src/shared/**/*.ts"]
 }

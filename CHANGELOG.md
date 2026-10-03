@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- New main window: a sidebar with Library, Search, Queue, Devices, Settings and Plugins (Alt+1 to Alt+6, visible keyboard focus), a Now Playing bar with progress, controls and volume, and a Settings page with account, sign out, Client ID hint, diagnostics and resource use. Library, Search, Queue, Devices and Plugins are placeholders for now. The window reopens on the last page and where you left it; if that place is no longer on a screen it opens centered. A banner asks you to log in again when new Spotify permissions are needed.
 - First-run setup wizard: create your Spotify app with step-by-step instructions and the exact Redirect URI to copy, paste and check the Client ID, log in (with the likely causes shown while waiting, because Spotify's own error pages never return to Playlish, and a Cancel button), and confirm Spotify accepts the account for playback. The Client ID is saved in the settings.
 - Typed Spotify client for every endpoint the MVP needs (profile, playback state and commands, devices, transfer, queue, saved tracks and albums, playlists and their items, search, saving to and removing from the library), in the current API shapes, with response shape checks, the request queue and caching. Integration tests against a fake Spotify server with fixtures.
 - Shared request queue for every Spotify Web API call: user actions first, then visible pages, then background work; at most two requests at a time; identical requests in flight share one call; a rate limit pauses everything until Retry-After and retries; a used-up quota pauses background work for 10 minutes. Small response cache with expiry and a size cap.
@@ -32,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The main window is built with Preact, bundled by esbuild into one script. Preact is internal to the main window: the playback host and plugins do not depend on it. Styles moved to `ui.css`, so the window's content security policy no longer allows inline styles.
 - Playlish now asks for the Spotify permissions the library, playlists and queue need. A login from before this change keeps playing and is asked to log in again once to grant them.
 - The refresh token is stored in `refresh-token.bin`, encrypted with Electron's safeStorage (Windows DPAPI) and bound to the Client ID it was issued for; the access token is kept in memory only. The spike's `session.bin` is migrated once and removed only after the new file is verified. A refresh token Spotify rejects is deleted.
 - The Spotify API client takes injectable `fetch`, base URL and delay, and the two playback calls share one retry routine.

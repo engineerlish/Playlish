@@ -1,6 +1,7 @@
-import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
+import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isPage } from '../shared/pages';
 import type { PlaybackState, PlayerCommand, SetupAction, Snapshot, UiCommand } from '../shared/types';
 import { appInfo, initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
@@ -18,6 +19,7 @@ import { startSoakDriver } from './soak-driver';
 import { SpotifyClient } from './spotify/client';
 import { SpotifyApiError, describeApiError } from './spotify/errors';
 import { RequestQueue } from './spotify/queue';
+import { fitWindowState, toWindowState } from './window-state';
 
 /*
  * Playlish spike (concept B: castLabs Electron).
@@ -173,6 +175,11 @@ function snapshot(): Snapshot {
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
     setup: setup?.view() ?? null,
+    // Cleared by itself once a new login grants the missing permissions.
+    needsRelogin: auth !== null && auth.isLoggedIn() && auth.missingScopes().length > 0,
+    lastPage: settings?.get().lastPage ?? 'library',
+    clientIdHint: clientId ? clientId.slice(-4) : null,
+    appVersion: app.getVersion(),
   };
 }
 
@@ -200,11 +207,21 @@ function openUi(): void {
     uiWindow.focus();
     return;
   }
+  // Reopen where the user left the window, unless that place is no longer on any screen.
+  const saved = settings?.get().window;
+  const fitted = saved ? fitWindowState(saved, screen.getAllDisplays().map((d) => d.workArea)) : null;
   uiWindow = new BrowserWindow({
-    width: 480,
-    height: 560,
-    title: 'Playlish (spike)',
+    width: fitted?.width ?? 1100,
+    height: fitted?.height ?? 720,
+    ...(fitted?.x !== undefined && fitted.y !== undefined ? { x: fitted.x, y: fitted.y } : {}),
+    // CHANGE HERE: smallest window size (keep in step with MIN_SIZE in window-state.ts).
+    minWidth: 360,
+    minHeight: 360,
+    title: 'Playlish',
     autoHideMenuBar: true,
+    // Shown once the page has drawn, so the window never flashes white.
+    show: false,
+    backgroundColor: '#121212',
     webPreferences: {
       preload: path.join(__dirname, '../preload/ui-preload.js'),
       contextIsolation: true,
@@ -213,6 +230,22 @@ function openUi(): void {
     },
   });
   uiWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const win = uiWindow;
+  win.once('ready-to-show', () => {
+    if (fitted?.maximized) win.maximize();
+    win.show();
+  });
+  // Saves are debounced by the settings store, so dragging the window does not write on every pixel.
+  const saveBounds = () => {
+    if (win.isDestroyed() || win.isMinimized()) return;
+    // getNormalBounds keeps the un-maximized size, so un-maximizing next time restores it.
+    settings?.update({ window: toWindowState(win.getNormalBounds(), win.isMaximized()) });
+  };
+  win.on('resize', saveBounds);
+  win.on('move', saveBounds);
+  win.on('maximize', saveBounds);
+  win.on('unmaximize', saveBounds);
+  win.on('close', saveBounds);
   uiWindow.on('closed', () => {
     uiWindow = null; // Destroyed: no renderer process remains while the app sits in the tray.
   });
@@ -454,7 +487,8 @@ function registerIpc(): void {
     if (missing.length > 0 && !warnedAboutScopes) {
       warnedAboutScopes = true;
       authLog.warn('The current login lacks permissions Playlish now needs', { code: 'SCOPES_MISSING', context: { missing } });
-      setStatus('Playlish needs a few new Spotify permissions. Please log in again to grant them.');
+      // The UI shows a banner for this (Snapshot.needsRelogin).
+      pushSnapshot();
     }
     return token;
   });
@@ -506,6 +540,9 @@ function registerIpc(): void {
   // UI -> main
   ipcMain.on('ui:login', () => void login());
   ipcMain.on('ui:request-snapshot', () => pushSnapshot());
+  ipcMain.on('ui:navigate', (_event, page: unknown) => {
+    if (isPage(page)) settings?.update({ lastPage: page });
+  });
   ipcMain.on('ui:export-diagnostics', () => void exportDiagnostics());
   ipcMain.on('ui:sign-out', () => signOut());
   ipcMain.on('ui:setup', (_event, action: SetupAction) => {
