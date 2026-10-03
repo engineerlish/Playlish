@@ -209,7 +209,10 @@ function openUi(): void {
   }
   // Reopen where the user left the window, unless that place is no longer on any screen.
   const saved = settings?.get().window;
-  const fitted = saved ? fitWindowState(saved, screen.getAllDisplays().map((d) => d.workArea)) : null;
+  // Primary screen first: fitWindowState centers there when the saved place is gone.
+  const primary = screen.getPrimaryDisplay();
+  const areas = [primary, ...screen.getAllDisplays().filter((d) => d.id !== primary.id)].map((d) => d.workArea);
+  const fitted = saved ? fitWindowState(saved, areas) : null;
   uiWindow = new BrowserWindow({
     width: fitted?.width ?? 1100,
     height: fitted?.height ?? 720,

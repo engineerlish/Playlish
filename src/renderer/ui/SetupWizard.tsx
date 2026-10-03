@@ -104,11 +104,13 @@ export function SetupWizard({ view }: { view: SetupView }) {
       {view.error && (
         <div id="setupError" class="banner error" role="alert">
           <strong id="setupErrorText">{view.error.message}</strong>
-          <ul id="setupHints">
-            {view.error.hints.map((hint) => (
-              <li key={hint}>{hint}</li>
-            ))}
-          </ul>
+          {view.error.hints.length > 0 && (
+            <ul id="setupHints">
+              {view.error.hints.map((hint) => (
+                <li key={hint}>{hint}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

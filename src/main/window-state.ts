@@ -25,22 +25,38 @@ function overlap(a: Rect, b: Rect): { width: number; height: number } {
   };
 }
 
+// CHANGE HERE: screen assumed when Electron reports none.
+const FALLBACK_AREA: Rect = { x: 0, y: 0, width: 1280, height: 800 };
+
 /**
- * Turns saved window state into options for opening the window. Size is limited to the largest screen; the position is
- * kept only if enough of the window would be visible on one of the screens' work areas.
+ * Turns saved window state into options for opening the window. The position is kept only if enough of the window
+ * would be visible on one of the screens' work areas; otherwise the window opens centered on the primary screen. The
+ * size is limited to the screen the window will actually open on (not the largest one: with a portrait monitor that
+ * could be taller than the screen in use).
+ *
+ * `workAreas` must list the primary screen first.
  */
 export function fitWindowState(saved: WindowState, workAreas: Rect[]): { width: number; height: number; x?: number; y?: number; maximized: boolean } {
-  const largest = workAreas.reduce((best, a) => (a.width * a.height > best.width * best.height ? a : best), workAreas[0] ?? { x: 0, y: 0, width: 1280, height: 800 });
-  const width = Math.max(MIN_SIZE.width, Math.min(saved.width, largest.width));
-  const height = Math.max(MIN_SIZE.height, Math.min(saved.height, largest.height));
+  const primary = workAreas[0] ?? FALLBACK_AREA;
+  let target = primary;
+  let keepPosition = false;
+  if (saved.x !== null && saved.y !== null) {
+    const rect = { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
+    // The screen showing the most of the window is the one it reopens on.
+    let bestArea = 0;
+    for (const area of workAreas) {
+      const o = overlap(rect, area);
+      if (o.width >= MIN_VISIBLE_WIDTH && o.height >= MIN_VISIBLE_HEIGHT && o.width * o.height > bestArea) {
+        bestArea = o.width * o.height;
+        target = area;
+        keepPosition = true;
+      }
+    }
+  }
+  const width = Math.max(MIN_SIZE.width, Math.min(saved.width, target.width));
+  const height = Math.max(MIN_SIZE.height, Math.min(saved.height, target.height));
   const result = { width, height, maximized: saved.maximized };
-  if (saved.x === null || saved.y === null) return result;
-  const rect = { x: saved.x, y: saved.y, width, height };
-  const visible = workAreas.some((area) => {
-    const o = overlap(rect, area);
-    return o.width >= MIN_VISIBLE_WIDTH && o.height >= MIN_VISIBLE_HEIGHT;
-  });
-  return visible ? { ...result, x: saved.x, y: saved.y } : result;
+  return keepPosition && saved.x !== null && saved.y !== null ? { ...result, x: saved.x, y: saved.y } : result;
 }
 
 /** Window state to save from the window's normal (not maximized) bounds. */

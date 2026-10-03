@@ -3,6 +3,8 @@ import { fitWindowState, toWindowState } from '../src/main/window-state';
 
 const MAIN = { x: 0, y: 0, width: 1920, height: 1040 };
 const LEFT = { x: -1280, y: 0, width: 1280, height: 984 };
+// A portrait monitor with more area than MAIN, as on a real three-monitor setup.
+const PORTRAIT = { x: -1440, y: -1114, width: 1440, height: 2512 };
 
 describe('fitWindowState', () => {
   it('keeps a saved position that is on a screen', () => {
@@ -25,7 +27,22 @@ describe('fitWindowState', () => {
     expect(fitted.x).toBeUndefined();
   });
 
-  it('shrinks a window bigger than the largest screen and keeps a minimum size', () => {
+  it('limits the size to the primary screen when centering, even if another screen is bigger', () => {
+    expect(fitWindowState({ width: 9000, height: 9000, x: null, y: null, maximized: false }, [MAIN, PORTRAIT])).toMatchObject({ width: 1920, height: 1040 });
+  });
+
+  it('limits the size to the screen the window reopens on', () => {
+    expect(fitWindowState({ width: 9000, height: 9000, x: -1400, y: -1000, maximized: false }, [MAIN, PORTRAIT])).toMatchObject({ width: 1440, height: 2512, x: -1400 });
+  });
+
+  it('picks the screen showing most of a window that spans two screens', () => {
+    // Mostly on LEFT (1180 px wide there), a little on MAIN (900 px): LEFT's height applies.
+    expect(fitWindowState({ width: 2080, height: 1200, x: -1180, y: 0, maximized: false }, [MAIN, LEFT])).toMatchObject({ height: 984, x: -1180 });
+    // Mostly on MAIN this time, which is listed first: MAIN's height applies.
+    expect(fitWindowState({ width: 2000, height: 1200, x: -300, y: 0, maximized: false }, [MAIN, LEFT])).toMatchObject({ height: 1040, x: -300 });
+  });
+
+  it('shrinks a window bigger than the screen and keeps a minimum size', () => {
     expect(fitWindowState({ width: 4000, height: 3000, x: null, y: null, maximized: true }, [MAIN, LEFT])).toEqual({ width: 1920, height: 1040, maximized: true });
     expect(fitWindowState({ width: 100, height: 100, x: null, y: null, maximized: false }, [MAIN])).toMatchObject({ width: 360, height: 360 });
   });

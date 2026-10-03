@@ -51,7 +51,10 @@ export function App() {
           {snapshot.status}
         </div>
         <Banners snapshot={snapshot} />
-        {!snapshot.loggedIn && !snapshot.configError ? (
+        {/* Settings stays reachable while logged out: diagnostics and reporting must work without a login. */}
+        {current === 'settings' ? (
+          <SettingsPage snapshot={snapshot} />
+        ) : !snapshot.loggedIn && !snapshot.configError ? (
           <section class="card">
             <h2>Log in to Spotify</h2>
             <p>Playlish needs your Spotify login to play music.</p>
@@ -59,8 +62,6 @@ export function App() {
               Log in with Spotify
             </button>
           </section>
-        ) : current === 'settings' ? (
-          <SettingsPage snapshot={snapshot} />
         ) : (
           <PlaceholderPage page={current} />
         )}
