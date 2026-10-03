@@ -5,3 +5,4 @@ spike.config.json
 coverage/
 test-results.json
 ci-summary.md
+smoke-results/
