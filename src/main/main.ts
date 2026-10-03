@@ -10,6 +10,7 @@ import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
+import { SettingsStore } from './settings';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
 
@@ -52,6 +53,7 @@ let playback: PlaybackState | null = null;
 let status = 'Starting…';
 let startedPlayback = false;
 let crashNotice: CrashReport | null = null;
+let settings: SettingsStore | null = null;
 let uiReadyLogged = false;
 const playbackErrors = new ErrorBurstLimiter();
 // CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
@@ -483,6 +485,10 @@ async function main(): Promise<void> {
     (err: unknown) => widevineLog.error('Widevine CDM failed to load', { code: 'WIDEVINE_NOT_READY', error: err }),
   );
   await app.whenReady();
+  const settingsLog = log.child('settings');
+  settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'), {
+    report: (message) => settingsLog.warn(message, { code: 'SETTINGS' }),
+  });
   log.info('Playlish starting', { context: { version: app.getVersion(), electron: process.versions.electron, level: log.level } });
 
   const result = loadConfig(app.getAppPath());
@@ -552,5 +558,8 @@ async function main(): Promise<void> {
   }
 }
 
-app.on('before-quit', () => metrics?.stop());
+app.on('before-quit', () => {
+  metrics?.stop();
+  settings?.flush();
+});
 void main();
