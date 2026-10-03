@@ -9,6 +9,7 @@ const api: UiApi = {
     ipcRenderer.on('ui:snapshot', (_event, snapshot: Snapshot) => callback(snapshot));
   },
   requestSnapshot: () => ipcRenderer.send('ui:request-snapshot'),
+  reportError: (message, stack) => ipcRenderer.send('renderer:error', 'ui', message, stack),
 };
 
 contextBridge.exposeInMainWorld('ui', api);

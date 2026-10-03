@@ -89,5 +89,18 @@ fadeBtn.addEventListener('click', () => window.ui.command({ type: 'fadeToggle' }
 nextBtn.addEventListener('click', () => window.ui.command({ type: 'next' }));
 volumeEl.addEventListener('input', () => window.ui.command({ type: 'volume', value: Number(volumeEl.value) / 100 }));
 
+/** Sends uncaught errors and unhandled promise rejections in this page to the main process log. */
+function forwardPageErrors(report: (message: string, stack?: string) => void): void {
+  window.addEventListener('error', (event) => {
+    const error = event.error as unknown;
+    report(event.message || String(error), error instanceof Error ? error.stack : undefined);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason as unknown;
+    report(`Unhandled promise rejection: ${reason instanceof Error ? reason.message : String(reason)}`, reason instanceof Error ? reason.stack : undefined);
+  });
+}
+
+forwardPageErrors((message, stack) => window.ui.reportError(message, stack));
 window.ui.onSnapshot(render);
 window.ui.requestSnapshot();

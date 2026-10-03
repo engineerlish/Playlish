@@ -169,6 +169,20 @@ function startPlayer(): void {
   });
 }
 
+/** Sends uncaught errors and unhandled promise rejections in this page to the main process log. */
+function forwardPageErrors(report: (message: string, stack?: string) => void): void {
+  window.addEventListener('error', (event) => {
+    const error = event.error as unknown;
+    report(event.message || String(error), error instanceof Error ? error.stack : undefined);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason as unknown;
+    report(`Unhandled promise rejection: ${reason instanceof Error ? reason.message : String(reason)}`, reason instanceof Error ? reason.stack : undefined);
+  });
+}
+
+forwardPageErrors((message, stack) => window.host.reportError(message, stack));
+
 // The SDK script calls this global once it has loaded; it must exist before the script is added.
 window.onSpotifyWebPlaybackSDKReady = startPlayer;
 const script = document.createElement('script');
