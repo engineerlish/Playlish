@@ -1,0 +1,17 @@
+{
+  "id": "fixtureuser",
+  "display_name": "Fixture User",
+  "uri": "spotify:user:fixtureuser",
+  "type": "user",
+  "images": [
+    {
+      "url": "https://i.scdn.co/image/fixture300",
+      "height": 300,
+      "width": 300
+    }
+  ],
+  "href": "https://api.spotify.com/v1/users/fixtureuser",
+  "external_urls": {
+    "spotify": "https://open.spotify.com/user/fixtureuser"
+  }
+}

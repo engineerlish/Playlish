@@ -1,0 +1,45 @@
+{
+  "device": {
+    "id": "devicefixture000000000000000000000000001",
+    "name": "Playlish",
+    "type": "Computer",
+    "is_active": true,
+    "is_private_session": false,
+    "is_restricted": false,
+    "volume_percent": 50,
+    "supports_volume": true
+  },
+  "repeat_state": "context",
+  "shuffle_state": true,
+  "context": null,
+  "timestamp": 1791000000000,
+  "progress_ms": 1000,
+  "is_playing": false,
+  "item": {
+    "id": "episode000000000000001",
+    "name": "Fixture Episode 1",
+    "uri": "spotify:episode:episode000000000000001",
+    "type": "episode",
+    "duration_ms": 1800000,
+    "images": [
+      {
+        "url": "https://i.scdn.co/image/fixture640",
+        "height": 640,
+        "width": 640
+      }
+    ],
+    "show": {
+      "id": "show000000000000000001",
+      "name": "Fixture Show",
+      "uri": "spotify:show:show000000000000000001",
+      "images": [
+        {
+          "url": "https://i.scdn.co/image/fixture640",
+          "height": 640,
+          "width": 640
+        }
+      ]
+    }
+  },
+  "currently_playing_type": "episode"
+}
