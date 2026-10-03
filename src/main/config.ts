@@ -1,7 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-/** Settings the spike reads from spike.config.json (the real app will use the first-run wizard instead). */
+/**
+ * The spike's spike.config.json. Only read once now, to import its Client ID into the settings (#40); the first-run
+ * wizard replaced it.
+ */
 export interface SpikeConfig {
   clientId: string;
   trackUri: string;
@@ -16,9 +19,12 @@ export interface ConfigResult {
 }
 
 // CHANGE HERE: default track played by the spike (Rick Astley - Never Gonna Give You Up).
-const DEFAULT_TRACK_URI = 'spotify:track:4cOdK2wGLETKBW3PvgPWqT';
+export const DEFAULT_TRACK_URI = 'spotify:track:4cOdK2wGLETKBW3PvgPWqT';
 // CHANGE HERE: loopback port for the redirect URI and the local page server. Must match the Redirect URI registered in the Spotify dashboard.
-const DEFAULT_PORT = 43821;
+export const DEFAULT_PORT = 43821;
+
+// CHANGE HERE: name of the spike's config file in the project folder.
+export const LEGACY_CONFIG_FILE = 'spike.config.json';
 
 const CLIENT_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const TRACK_URI_PATTERN = /^spotify:track:[A-Za-z0-9]{22}$/;
@@ -39,7 +45,7 @@ function fail(error: string, port: number): ConfigResult {
  * Always returns an error string instead of throwing, so the UI can show a helpful message.
  */
 export function loadConfig(appRoot: string): ConfigResult {
-  const file = path.join(appRoot, 'spike.config.json');
+  const file = path.join(appRoot, LEGACY_CONFIG_FILE);
   let raw: Record<string, unknown> = {};
 
   if (fs.existsSync(file)) {
@@ -81,4 +87,60 @@ export function loadConfig(appRoot: string): ConfigResult {
 /** The exact Redirect URI the user must register in the Spotify dashboard. */
 export function redirectUriFor(port: number): string {
   return `http://127.0.0.1:${port}/callback`;
+}
+
+/**
+ * The Client ID to use. PLAYLISH_CLIENT_ID (when set to a valid id) is a developer override; otherwise the one saved in
+ * the settings by the setup wizard. Returns null when setup is needed.
+ */
+export function resolveClientId(envValue: string | undefined, settingsValue: string | null): string | null {
+  const fromEnv = (envValue ?? '').trim().toLowerCase();
+  if (CLIENT_ID_PATTERN.test(fromEnv)) return fromEnv;
+  return settingsValue && CLIENT_ID_PATTERN.test(settingsValue) ? settingsValue.toLowerCase() : null;
+}
+
+export type LegacyImportResult = 'no-file' | 'imported' | 'already-imported' | 'kept-existing' | 'invalid-file' | 'not-verified';
+
+export interface LegacyImportDeps {
+  appRoot: string;
+  /** The Client ID currently in the settings. */
+  currentClientId: () => string | null;
+  /** Saves the Client ID and writes the settings file now. */
+  saveClientId: (clientId: string) => void;
+  /** Reads the Client ID back from the settings file on disk (not from memory). */
+  readBackClientId: () => string | null;
+  removeFile?: (file: string) => void;
+  report?: (message: string) => void;
+}
+
+/**
+ * One-time import of the spike's spike.config.json into the settings. The file is deleted only after the Client ID has
+ * been written and read back from disk. Safe to run any number of times. A different Client ID already in the settings
+ * is never overwritten, and an invalid file is left untouched for the user to look at.
+ */
+export function importLegacyConfig(deps: LegacyImportDeps): LegacyImportResult {
+  const file = path.join(deps.appRoot, LEGACY_CONFIG_FILE);
+  const report = deps.report ?? (() => undefined);
+  const remove = deps.removeFile ?? ((f: string) => fs.rmSync(f, { force: true }));
+  if (!fs.existsSync(file)) return 'no-file';
+
+  const legacy = loadConfig(deps.appRoot);
+  if (!legacy.config) {
+    report(`${LEGACY_CONFIG_FILE} was not imported because it is not valid (${legacy.error ?? 'unknown problem'}); it was left in place`);
+    return 'invalid-file';
+  }
+  const clientId = legacy.config.clientId.toLowerCase();
+  const current = deps.currentClientId()?.toLowerCase() ?? null;
+  if (current && current !== clientId) {
+    report(`${LEGACY_CONFIG_FILE} has a different Client ID than the settings; the settings were kept and the file was left in place`);
+    return 'kept-existing';
+  }
+  if (!current) deps.saveClientId(clientId);
+  if (deps.readBackClientId()?.toLowerCase() !== clientId) {
+    report(`the Client ID from ${LEGACY_CONFIG_FILE} could not be confirmed in the settings; the file was left in place`);
+    return 'not-verified';
+  }
+  remove(file);
+  report(`imported the Client ID from ${LEGACY_CONFIG_FILE} into the settings and removed the file`);
+  return current ? 'already-imported' : 'imported';
 }
