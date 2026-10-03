@@ -48,6 +48,8 @@ npm run build
 npm start
 ```
 
+`npm install` also downloads the castLabs Electron binary (its package has no install script of its own, so the root `postinstall` runs it). It skips the download when the binary is already there, so a VMP-signed binary is kept.
+
 Checks to run before opening a pull request:
 
 | Command | What it does |
