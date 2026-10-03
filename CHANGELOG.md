@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Sign out button: deletes the stored session and stops the player.
+- `tools/audit/scan-profile.ps1` checks a profile folder for secrets stored in plain text (prints only file names and counts).
 - Settings store: one validated JSON file (Client ID, close to tray, start minimized, window state, last page, volume per output device), saved atomically and debounced; invalid values fall back to defaults and a corrupt file is kept aside.
 - Local smoke test (`npm run smoke`): real login, Widevine playback and audio checked on the Windows audio meter (sound, silence on pause, volume, fades), with a report in `smoke-results/` and optional issue filing after confirmation. Shared issue format and deduplication for automated failure reports.
 - Performance harness (`npm run perf:idle`, `perf:ui`, `perf:soak`) that measures the real app against the budgets in `perf/budgets.json`, startup milestones in the log, and an opt-in soak driver (`PLAYLISH_SOAK=1`). CI reports performance on every pull request against main, and the nightly run adds a 30 minute soak.
@@ -27,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The refresh token is stored in `refresh-token.bin`, encrypted with Electron's safeStorage (Windows DPAPI) and bound to the Client ID it was issued for; the access token is kept in memory only. The spike's `session.bin` is migrated once and removed only after the new file is verified. A refresh token Spotify rejects is deleted.
 - The Spotify API client takes injectable `fetch`, base URL and delay, and the two playback calls share one retry routine.
 - `Auth` accepts an injected `fetch` and clock so it can be tested without network access.
 - Fading out no longer pauses if you move the volume slider during the fade; your volume change wins.
