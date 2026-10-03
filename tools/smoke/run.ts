@@ -157,10 +157,24 @@ function preconditions(): boolean {
   }
 
   const require = createRequire(import.meta.url);
-  const { loadConfig } = require(path.join(ROOT, 'dist', 'main', 'config.js')) as { loadConfig: (root: string) => { error: string | null } };
-  const config = loadConfig(ROOT);
-  record({ id: 'config', name: 'spike.config.json is valid', status: config.error ? 'fail' : 'pass', details: config.error ?? '', area: 'auth', severity: 'high' });
-  return config.error === null;
+  const { resolveClientId } = require(path.join(ROOT, 'dist', 'main', 'config.js')) as { resolveClientId: (env: string | undefined, saved: string | null) => string | null };
+  let saved: string | null = null;
+  try {
+    saved = (JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')) as { clientId?: string | null }).clientId ?? null;
+  } catch {
+    // No settings yet.
+  }
+  const legacy = fs.existsSync(path.join(ROOT, 'spike.config.json'));
+  const configured = resolveClientId(process.env['PLAYLISH_CLIENT_ID'], saved) !== null || legacy;
+  record({
+    id: 'config',
+    name: 'Client ID configured',
+    status: configured ? 'pass' : 'fail',
+    details: configured ? (legacy ? 'spike.config.json found; the app imports it on start' : '') : 'Run Playlish once and finish the setup wizard first',
+    area: 'auth',
+    severity: 'high',
+  });
+  return configured;
 }
 
 /** Starts the app with the DevTools port and checks login, playback and audio. */

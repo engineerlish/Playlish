@@ -1,16 +1,17 @@
-import { BrowserWindow, Menu, Tray, app, components, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
+import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { PlaybackState, PlayerCommand, Snapshot, UiCommand } from '../shared/types';
+import type { PlaybackState, PlayerCommand, SetupAction, Snapshot, UiCommand } from '../shared/types';
 import { appInfo, initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
-import { loadConfig, redirectUriFor, type SpikeConfig } from './config';
+import { DEFAULT_PORT, DEFAULT_TRACK_URI, importLegacyConfig, redirectUriFor, resolveClientId } from './config';
 import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
 import { SettingsStore } from './settings';
+import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyClient } from './spotify/client';
@@ -43,8 +44,14 @@ const playerLog = log.child('player');
 const uiLog = log.child('ui');
 installProcessHandlers(process, logging.crashes, () => app.exit(1));
 
-let config: SpikeConfig | null = null;
-let serverPort = 0;
+let clientId: string | null = null;
+let setup: SetupController | null = null;
+let playerWaiters: ((result: PlayerCheck) => void)[] = [];
+const serverPort = DEFAULT_PORT;
+// CHANGE HERE: the spike still starts this test track when the player is ready; the Now Playing work (#43) replaces it.
+const TEST_TRACK_URI = DEFAULT_TRACK_URI;
+// CHANGE HERE: how long the wizard waits for the player to be accepted by Spotify.
+const PLAYER_CHECK_TIMEOUT_MS = 45_000;
 let configError: string | null = null;
 let auth: Auth | null = null;
 let metrics: MetricsLogger | null = null;
@@ -164,6 +171,7 @@ function snapshot(): Snapshot {
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
+    setup: setup?.view() ?? null,
   };
 }
 
@@ -300,6 +308,75 @@ function restartHost(): void {
   createHostWindow();
 }
 
+/** Creates the login and the API client for a Client ID (again if it changed). */
+function startSession(id: string): Auth {
+  if (auth && clientId === id) return auth;
+  clientId = id;
+  tokens?.clear();
+  const session = new Auth(id, redirectUriFor(serverPort), {
+    onRefreshToken: (token) => tokens?.save(id, token),
+    onSessionExpired: () => {
+      tokens?.clear();
+      authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
+    },
+  });
+  auth = session;
+  spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue });
+  return session;
+}
+
+/** Tells everything waiting for the player whether Spotify accepted it. */
+function resolvePlayerWaiters(result: PlayerCheck): void {
+  const waiting = playerWaiters;
+  playerWaiters = [];
+  for (const resolve of waiting) resolve(result);
+}
+
+/** Starts the playback host and waits until Spotify accepts the device (or says why not). */
+function checkPlayer(): Promise<PlayerCheck> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      playerWaiters = playerWaiters.filter((w) => w !== done);
+      resolve({ ok: false, kind: 'timeout', message: 'the player did not start within 45 seconds' });
+    }, PLAYER_CHECK_TIMEOUT_MS);
+    const done = (result: PlayerCheck) => {
+      clearTimeout(timer);
+      resolve(result);
+    };
+    playerWaiters.push(done);
+    if (hostWindow && !hostWindow.isDestroyed() && deviceId) resolvePlayerWaiters({ ok: true });
+    else createHostWindow();
+  });
+}
+
+/** Runs the first-run wizard until the user has a working player. */
+function startSetup(): void {
+  const setupLog = log.child('setup');
+  setup = new SetupController({
+    redirectUri: redirectUriFor(serverPort),
+    initialClientId: settings?.get().clientId ?? null,
+    saveClientId: (id) => {
+      settings?.update({ clientId: id });
+      settings?.flush();
+      setupLog.info('Client ID saved', { code: 'SETUP_CLIENT_ID' });
+    },
+    login: (id) => startSession(id).startLogin((url) => shell.openExternal(url)),
+    cancelLogin: () => auth?.cancelLogin(),
+    checkPlayer,
+    openExternal: (url) => shell.openExternal(url),
+    copyText: (text) => {
+      void clipboard.writeText(text);
+    },
+    onChange: () => pushSnapshot(),
+    onDone: () => {
+      setup = null;
+      setupLog.info('Setup finished', { code: 'SETUP_DONE' });
+      setStatus('Ready.');
+    },
+  });
+  setStatus('Welcome to Playlish.');
+}
+
 /** Forgets the session everywhere: in memory, on disk, and in the playback host. */
 function signOut(): void {
   auth?.clear();
@@ -330,14 +407,14 @@ async function login(): Promise<void> {
 
 /** Starts the configured track on the SDK device and reports errors in plain language. */
 async function playConfiguredTrack(): Promise<void> {
-  if (!auth || !config || !deviceId) return;
+  if (!auth || !deviceId) return;
   try {
     // One command only. The play call carries the device id, which also makes it the active device. A separate transfer
     // before it made the SDK start loading the account's remembered track and then abort that load when play arrived
     // (net::ERR_ABORTED on the first audio request), leaving some launches silent (#17). 404s while the new device is
     // still unknown to the Web API are retried by the client.
     setStatus('Connecting the player to your account…');
-    await spotify?.play({ deviceId, uris: [config.trackUri] });
+    await spotify?.play({ deviceId, uris: [TEST_TRACK_URI] });
     setStatus('Playing.');
   } catch (err) {
     playerLog.error('Could not start playback', {
@@ -384,7 +461,8 @@ function registerIpc(): void {
   ipcMain.on('host:ready', (_event, id: string) => {
     deviceId = id;
     setStatus('Player ready.');
-    if (!startedPlayback) {
+    resolvePlayerWaiters({ ok: true });
+    if (!startedPlayback && !setup) {
       startedPlayback = true;
       void playConfiguredTrack();
     }
@@ -392,6 +470,9 @@ function registerIpc(): void {
   ipcMain.on('host:state', (_event, state: PlaybackState | null) => onHostState(state));
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
     playerLog.error(`Player reported ${kind}: ${message}`, { code: `PLAYER_${kind.toUpperCase()}` });
+    if (['account_error', 'authentication_error', 'initialization_error', 'sdk_load', 'connect'].includes(kind)) {
+      resolvePlayerWaiters({ ok: false, kind, message });
+    }
     if (kind === 'stalled') {
       restartHost();
       return;
@@ -420,6 +501,9 @@ function registerIpc(): void {
   ipcMain.on('ui:request-snapshot', () => pushSnapshot());
   ipcMain.on('ui:export-diagnostics', () => void exportDiagnostics());
   ipcMain.on('ui:sign-out', () => signOut());
+  ipcMain.on('ui:setup', (_event, action: SetupAction) => {
+    setup?.dispatch(action).catch((err: unknown) => log.child('setup').error('Setup action failed', { code: 'SETUP_ACTION', error: err }));
+  });
   ipcMain.on('ui:report-issue', () => {
     openIssue(
       buildIssueUrl({
@@ -500,10 +584,6 @@ async function main(): Promise<void> {
   });
   log.info('Playlish starting', { context: { version: app.getVersion(), electron: process.versions.electron, level: log.level } });
 
-  const result = loadConfig(app.getAppPath());
-  config = result.config;
-  configError = result.error;
-
   metrics = new MetricsLogger(
     path.join(app.getPath('userData'), 'perf.csv'),
     () => ({
@@ -520,19 +600,22 @@ async function main(): Promise<void> {
   // Milestone read by the performance harness (tools/perf): time from process start to the tray icon.
   log.info('Tray ready', { code: 'STARTUP_TRAY', context: { msSinceStart: Math.round(performance.now()) } });
 
-  serverPort = result.port;
-  if (config) {
-    const clientId = config.clientId;
-    const session = new Auth(clientId, redirectUriFor(config.port), {
-      onRefreshToken: (token) => tokens?.save(clientId, token),
-      onSessionExpired: () => {
-        tokens?.clear();
-        authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
-      },
-    });
-    auth = session;
-    spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue });
-  }
+  // The spike's spike.config.json is imported once into the settings, then removed (verified first).
+  const importLog = log.child('settings');
+  const store = settings;
+  importLegacyConfig({
+    appRoot: app.getAppPath(),
+    currentClientId: () => store.get().clientId,
+    saveClientId: (id) => {
+      store.update({ clientId: id });
+      store.flush();
+    },
+    readBackClientId: () => new SettingsStore(store.file).get().clientId,
+    report: (message) => importLog.info(message, { code: 'LEGACY_CONFIG' }),
+  });
+  const configuredClientId = resolveClientId(process.env['PLAYLISH_CLIENT_ID'], store.get().clientId);
+  if (configuredClientId) startSession(configuredClientId);
+
   try {
     // The server always starts so the UI window can load and explain configuration problems.
     await startServer({
@@ -546,7 +629,6 @@ async function main(): Promise<void> {
     });
   } catch (err) {
     configError = `Could not start the local server on port ${serverPort} (is another copy running?): ${(err as Error).message}`;
-    auth = null;
   }
 
   await cdmReady;
@@ -555,13 +637,17 @@ async function main(): Promise<void> {
   const newestCrash = logging.crashes.list()[0];
   const report = newestCrash ? logging.crashes.read(newestCrash) : null;
   crashNotice = unseenCrash(report ? [report] : [], seenCrashIds());
-  const saved = auth && config ? (tokens?.load(config.clientId) ?? null) : null;
-  if (auth && saved) {
+  const saved = auth && clientId ? (tokens?.load(clientId) ?? null) : null;
+  if (configError) {
+    setStatus('Playlish could not start its local server.');
+  } else if (!clientId) {
+    startSetup();
+  } else if (auth && saved) {
     auth.restore(saved);
     setStatus('Restoring your session…');
     createHostWindow();
   } else {
-    setStatus(configError ? 'Configuration needed.' : 'Not logged in.');
+    setStatus('Not logged in.');
   }
   if (!process.argv.includes(TRAY_ONLY_FLAG)) openUi();
 

@@ -155,6 +155,11 @@ export class Auth {
     });
   }
 
+  /** Cancels a login that is waiting for the browser (the wizard's Cancel button). */
+  cancelLogin(): void {
+    this.failPending(new Error('Login was cancelled.'));
+  }
+
   /** Called by the loopback server with the query string of /callback. Throws with a user-readable message on failure. */
   async handleCallback(params: URLSearchParams): Promise<void> {
     const pending = this.pending;

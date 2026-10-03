@@ -3,13 +3,13 @@
 Goal of the spike: log in with PKCE, play one full track through the Web Playback SDK in castLabs Electron, and measure RAM/CPU.
 Unofficial; not affiliated with Spotify. Requires Spotify Premium on the developer account.
 
-## 1. Create your Spotify Developer app (once)
+## 1. First start: the setup wizard
 
-1. Go to https://developer.spotify.com/dashboard and create an app (any name).
-2. Add this **exact** Redirect URI and save: `http://127.0.0.1:43821/callback`
-3. Tick **Web API** and **Web Playback SDK** as the APIs used.
-4. Copy the app's **Client ID** (32 characters). Do not share or paste the client secret anywhere; Playlish never uses it.
-5. Copy `spike.config.example.json` to `spike.config.json` and paste the Client ID.
+Start Playlish (see step 3) and follow the wizard. It walks you through creating your own app in the Spotify Developer Dashboard, shows the exact Redirect URI to register (`http://127.0.0.1:43821/callback`, with a copy button), checks the Client ID you paste, logs you in, and checks that Spotify accepts your account for playback (Premium is required).
+
+Never share or paste the Client secret anywhere; Playlish never uses it.
+
+If you used the spike before: its `spike.config.json` is imported into the settings on the first start, then removed (only after the Client ID has been saved and read back). `PLAYLISH_CLIENT_ID` still works as a developer override.
 
 ## 2. Create a castLabs EVS account and sign the dev Electron (once; this step needs you)
 

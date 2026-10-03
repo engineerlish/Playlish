@@ -1,4 +1,4 @@
-import type { PlaybackState, Snapshot, UiApi } from '../shared/types';
+import type { PlaybackState, SetupView, Snapshot, UiApi } from '../shared/types';
 
 declare global {
   interface Window {
@@ -56,6 +56,35 @@ function syncTick(): void {
   }
 }
 
+/** Draws the first-run wizard, or hides it. Everything else in the window is hidden while it shows. */
+function renderSetup(view: SetupView | null): void {
+  const panel = el<HTMLDivElement>('setupPanel');
+  panel.hidden = view === null;
+  for (const other of document.querySelectorAll<HTMLElement>('body > .panel:not(#setupPanel):not(#configPanel)')) other.hidden = view !== null;
+  if (!view) return;
+  el<HTMLDivElement>('setupProgress').textContent = `Step ${view.stepNumber} of ${view.stepCount}`;
+  for (const section of panel.querySelectorAll<HTMLElement>('section[data-step]')) section.hidden = section.dataset['step'] !== view.step;
+  el<HTMLElement>('redirectUri').textContent = view.redirectUri;
+  const input = el<HTMLInputElement>('clientIdInput');
+  if (document.activeElement !== input) input.value = view.clientId;
+  el<HTMLDivElement>('clientIdState').textContent = view.clientId === '' ? '' : view.clientIdValid ? 'Looks right.' : 'Not a Client ID yet.';
+  const hints = el<HTMLUListElement>('waitingHints');
+  hints.replaceChildren(...view.waitingHints.map((h) => Object.assign(document.createElement('li'), { textContent: h })));
+  const error = el<HTMLDivElement>('setupError');
+  error.hidden = view.error === null;
+  el<HTMLElement>('setupErrorText').textContent = view.error?.message ?? '';
+  el<HTMLUListElement>('setupHints').replaceChildren(...(view.error?.hints ?? []).map((h) => Object.assign(document.createElement('li'), { textContent: h })));
+  const show = (id: string, visible: boolean) => {
+    el<HTMLButtonElement>(id).hidden = !visible;
+  };
+  show('setupBack', !view.busy && view.step !== 'welcome' && view.step !== 'done' && view.step !== 'player-check');
+  show('setupNext', ['welcome', 'create-app', 'client-id'].includes(view.step));
+  show('setupLogin', view.step === 'login' && !view.busy && view.error === null);
+  show('setupCancel', view.step === 'login' && view.busy);
+  show('setupRetry', !view.busy && view.error !== null && (view.step === 'login' || view.step === 'player-check'));
+  show('setupFinish', view.step === 'done');
+}
+
 /** Re-renders the whole window from a snapshot. */
 function render(s: Snapshot): void {
   current = s.playback;
@@ -80,7 +109,8 @@ function render(s: Snapshot): void {
     ? `${m.processes} processes · working set ${m.workingSetMb} MB · private ${m.privateMb} MB · CPU ${m.cpuPercent}%`
     : 'Waiting for first sample…';
 
-  crashPanel.hidden = s.crashNotice === null;
+  renderSetup(s.setup);
+  crashPanel.hidden = s.crashNotice === null || s.setup !== null;
   crashText.textContent = s.crashNotice
     ? `Playlish recovered from a crash (${s.crashNotice.kind} in ${s.crashNotice.process}) at ${new Date(s.crashNotice.when).toLocaleString()}. Would you like to report it? You can review everything before it is sent.`
     : '';
@@ -96,6 +126,15 @@ toggleBtn.addEventListener('click', () => window.ui.command({ type: 'toggle' }))
 fadeBtn.addEventListener('click', () => window.ui.command({ type: 'fadeToggle' }));
 nextBtn.addEventListener('click', () => window.ui.command({ type: 'next' }));
 el<HTMLButtonElement>('signOut').addEventListener('click', () => window.ui.signOut());
+el<HTMLButtonElement>('openDashboard').addEventListener('click', () => window.ui.setup({ type: 'open-dashboard' }));
+el<HTMLButtonElement>('copyRedirect').addEventListener('click', () => window.ui.setup({ type: 'copy-redirect-uri' }));
+el<HTMLInputElement>('clientIdInput').addEventListener('input', (e) => window.ui.setup({ type: 'set-client-id', value: (e.target as HTMLInputElement).value }));
+el<HTMLButtonElement>('setupBack').addEventListener('click', () => window.ui.setup({ type: 'back' }));
+el<HTMLButtonElement>('setupNext').addEventListener('click', () => window.ui.setup({ type: 'next' }));
+el<HTMLButtonElement>('setupLogin').addEventListener('click', () => window.ui.setup({ type: 'login' }));
+el<HTMLButtonElement>('setupCancel').addEventListener('click', () => window.ui.setup({ type: 'cancel-login' }));
+el<HTMLButtonElement>('setupRetry').addEventListener('click', () => window.ui.setup({ type: 'retry' }));
+el<HTMLButtonElement>('setupFinish').addEventListener('click', () => window.ui.setup({ type: 'finish' }));
 el<HTMLButtonElement>('reportIssue').addEventListener('click', () => window.ui.reportIssue());
 el<HTMLButtonElement>('exportDiagnostics').addEventListener('click', () => window.ui.exportDiagnostics());
 el<HTMLButtonElement>('crashReport').addEventListener('click', () => window.ui.answerCrashNotice('report'));

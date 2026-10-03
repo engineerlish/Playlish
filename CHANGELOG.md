@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- First-run setup wizard: create your Spotify app with step-by-step instructions and the exact Redirect URI to copy, paste and check the Client ID, log in (with the likely causes shown while waiting, because Spotify's own error pages never return to Playlish, and a Cancel button), and confirm Spotify accepts the account for playback. The Client ID is saved in the settings.
 - Typed Spotify client for every endpoint the MVP needs (profile, playback state and commands, devices, transfer, queue, saved tracks and albums, playlists and their items, search, saving to and removing from the library), in the current API shapes, with response shape checks, the request queue and caching. Integration tests against a fake Spotify server with fixtures.
 - Shared request queue for every Spotify Web API call: user actions first, then visible pages, then background work; at most two requests at a time; identical requests in flight share one call; a rate limit pauses everything until Retry-After and retries; a used-up quota pauses background work for 10 minutes. Small response cache with expiry and a size cap.
 - Sign out button: deletes the stored session and stops the player.
@@ -38,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Fading out no longer pauses if you move the volume slider during the fade; your volume change wins.
 - Volume ramp, fade and playback-error-burst logic moved into small modules (`src/renderer/fade.ts`, `src/main/error-burst.ts`) so they can be tested.
 - TypeScript is pinned to 6.0.x, the newest line supported by `typescript-eslint`.
+
+### Removed
+
+- `spike.config.json` and `spike.config.example.json`. On the first start the spike's `spike.config.json` is imported into the settings and then deleted, only after the Client ID has been written and read back from disk; the import is safe to run any number of times, never overwrites a different Client ID already in the settings, and leaves an invalid file untouched. `PLAYLISH_CLIENT_ID` remains as a developer override.
 
 ### Fixed
 
