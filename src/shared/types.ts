@@ -45,6 +45,8 @@ export interface Snapshot {
   playback: PlaybackState | null;
   metrics: MetricsSample | null;
   perfLogPath: string;
+  /** Set after a crash the user has not been asked about yet. */
+  crashNotice: { when: string; process: string; kind: string } | null;
 }
 
 /** API exposed to the playback host page by its preload script. */
@@ -66,6 +68,12 @@ export interface UiApi {
   command(command: UiCommand): void;
   onSnapshot(callback: (snapshot: Snapshot) => void): void;
   requestSnapshot(): void;
+  /** Saves a redacted diagnostics file chosen by the user. */
+  exportDiagnostics(): void;
+  /** Opens a pre-filled GitHub issue in the browser for the user to review. */
+  reportIssue(): void;
+  /** Answers the crash notice: report it in the browser, or dismiss it. */
+  answerCrashNotice(action: 'report' | 'dismiss'): void;
   /** Forwards an uncaught page error to the main process log. */
   reportError(message: string, stack?: string): void;
 }

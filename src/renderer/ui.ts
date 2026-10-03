@@ -30,6 +30,8 @@ const nextBtn = el<HTMLButtonElement>('next');
 const volumeEl = el<HTMLInputElement>('volume');
 const metricsEl = el<HTMLDivElement>('metrics');
 const logPathEl = el<HTMLElement>('logPath');
+const crashPanel = el<HTMLDivElement>('crashPanel');
+const crashText = el<HTMLDivElement>('crashText');
 
 let current: PlaybackState | null = null;
 let tickTimer: number | null = null;
@@ -77,6 +79,11 @@ function render(s: Snapshot): void {
     ? `${m.processes} processes · working set ${m.workingSetMb} MB · private ${m.privateMb} MB · CPU ${m.cpuPercent}%`
     : 'Waiting for first sample…';
 
+  crashPanel.hidden = s.crashNotice === null;
+  crashText.textContent = s.crashNotice
+    ? `Playlish recovered from a crash (${s.crashNotice.kind} in ${s.crashNotice.process}) at ${new Date(s.crashNotice.when).toLocaleString()}. Would you like to report it? You can review everything before it is sent.`
+    : '';
+
   drawProgress();
   syncTick();
 }
@@ -87,6 +94,10 @@ prevBtn.addEventListener('click', () => window.ui.command({ type: 'previous' }))
 toggleBtn.addEventListener('click', () => window.ui.command({ type: 'toggle' }));
 fadeBtn.addEventListener('click', () => window.ui.command({ type: 'fadeToggle' }));
 nextBtn.addEventListener('click', () => window.ui.command({ type: 'next' }));
+el<HTMLButtonElement>('reportIssue').addEventListener('click', () => window.ui.reportIssue());
+el<HTMLButtonElement>('exportDiagnostics').addEventListener('click', () => window.ui.exportDiagnostics());
+el<HTMLButtonElement>('crashReport').addEventListener('click', () => window.ui.answerCrashNotice('report'));
+el<HTMLButtonElement>('crashDismiss').addEventListener('click', () => window.ui.answerCrashNotice('dismiss'));
 volumeEl.addEventListener('input', () => window.ui.command({ type: 'volume', value: Number(volumeEl.value) / 100 }));
 
 /** Sends uncaught errors and unhandled promise rejections in this page to the main process log. */
