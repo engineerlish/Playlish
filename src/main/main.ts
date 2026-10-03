@@ -605,6 +605,7 @@ async function main(): Promise<void> {
   const store = settings;
   importLegacyConfig({
     appRoot: app.getAppPath(),
+    customProfile: app.commandLine.hasSwitch('user-data-dir'),
     currentClientId: () => store.get().clientId,
     saveClientId: (id) => {
       store.update({ clientId: id });

@@ -58,6 +58,15 @@ describe('importLegacyConfig', () => {
     expect(reports.at(-1)).toMatch(/imported the Client ID/);
   });
 
+  it('never imports into a custom profile, so a test profile cannot take the file from the real one', () => {
+    writeLegacy({ clientId: ID });
+
+    expect(runImport({ customProfile: true })).toBe('skipped-custom-profile');
+    expect(legacyExists()).toBe(true);
+    expect(fs.existsSync(settingsFile)).toBe(false);
+    expect(reports.at(-1)).toMatch(/custom profile/);
+  });
+
   it('is safe to run twice', () => {
     writeLegacy({ clientId: ID });
 

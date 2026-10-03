@@ -99,10 +99,15 @@ export function resolveClientId(envValue: string | undefined, settingsValue: str
   return settingsValue && CLIENT_ID_PATTERN.test(settingsValue) ? settingsValue.toLowerCase() : null;
 }
 
-export type LegacyImportResult = 'no-file' | 'imported' | 'already-imported' | 'kept-existing' | 'invalid-file' | 'not-verified';
+export type LegacyImportResult = 'no-file' | 'skipped-custom-profile' | 'imported' | 'already-imported' | 'kept-existing' | 'invalid-file' | 'not-verified';
 
 export interface LegacyImportDeps {
   appRoot: string;
+  /**
+   * True when Playlish was started with a custom --user-data-dir (a test or throwaway profile). The import is skipped
+   * then, so such a profile can never take the project's spike.config.json away from the real profile.
+   */
+  customProfile?: boolean;
   /** The Client ID currently in the settings. */
   currentClientId: () => string | null;
   /** Saves the Client ID and writes the settings file now. */
@@ -123,6 +128,10 @@ export function importLegacyConfig(deps: LegacyImportDeps): LegacyImportResult {
   const report = deps.report ?? (() => undefined);
   const remove = deps.removeFile ?? ((f: string) => fs.rmSync(f, { force: true }));
   if (!fs.existsSync(file)) return 'no-file';
+  if (deps.customProfile) {
+    report(`${LEGACY_CONFIG_FILE} was not imported because Playlish runs with a custom profile; it is kept for the normal profile`);
+    return 'skipped-custom-profile';
+  }
 
   const legacy = loadConfig(deps.appRoot);
   if (!legacy.config) {
