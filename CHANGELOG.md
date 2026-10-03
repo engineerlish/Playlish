@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Local smoke test (`npm run smoke`): real login, Widevine playback and audio checked on the Windows audio meter (sound, silence on pause, volume, fades), with a report in `smoke-results/` and optional issue filing after confirmation. Shared issue format and deduplication for automated failure reports.
 - Performance harness (`npm run perf:idle`, `perf:ui`, `perf:soak`) that measures the real app against the budgets in `perf/budgets.json`, startup milestones in the log, and an opt-in soak driver (`PLAYLISH_SOAK=1`). CI reports performance on every pull request against main, and the nightly run adds a 30 minute soak.
 - Structured logging: JSON lines with level, module, error code and context in `logs/playlish.log`, rotated at 1 MB with 3 files kept. Tokens, Client IDs, emails and the Windows user name are redacted before anything is written. `PLAYLISH_DEBUG=1` turns on debug logging.
 - Crash reports in `logs/crashes` for uncaught exceptions, unhandled rejections and crashed renderer or helper processes (newest 10 kept). A crashed playback host is rebuilt automatically.
