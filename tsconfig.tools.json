@@ -10,8 +10,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true,
-    "verbatimModuleSyntax": true
+    "erasableSyntaxOnly": true
   },
   "include": ["tools/**/*.ts"]
 }
