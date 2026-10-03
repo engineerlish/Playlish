@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "main": "dist/main/main.js",
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/build-assets.mjs",
     "start": "npm run build && electron .",
     "start:tray": "npm run build && electron . --tray",
