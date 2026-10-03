@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Structured logging: JSON lines with level, module, error code and context in `logs/playlish.log`, rotated at 1 MB with 3 files kept. Tokens, Client IDs, emails and the Windows user name are redacted before anything is written. `PLAYLISH_DEBUG=1` turns on debug logging.
 - Crash reports in `logs/crashes` for uncaught exceptions, unhandled rejections and crashed renderer or helper processes (newest 10 kept). A crashed playback host is rebuilt automatically.
 - A separate `logs/plugins.log` for plugin errors, tagged with plugin id and version.
+- "Report an issue" opens a pre-filled GitHub issue with recent redacted logs in your browser to review and submit (no token in the app), and "Export diagnostics" saves a redacted bundle of logs, crash reports and system details. After a crash, the next start offers to report it once.
 - Apache-2.0 license and NOTICE file.
 - castLabs Electron playback spike: PKCE login over a loopback redirect, Web Playback SDK in a hidden host window, UI window that is destroyed when closed, tray icon, and a RAM/CPU logger.
 - Research and architecture proposal (`docs/PROPOSAL.md`) and spike measurements (`docs/SPIKE-RESULTS.md`).
