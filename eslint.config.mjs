@@ -10,7 +10,7 @@ export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**', 'coverage/**'] },
   js.configs.recommended,
   {
-    files: ['src/**/*.ts', 'tests/**/*.ts'],
+    files: ['src/**/*.ts', 'tests/**/*.ts', 'tools/**/*.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
@@ -21,6 +21,7 @@ export default tseslint.config(
   { files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'src/shared/**/*.ts'], ...typed('./tsconfig.main.json') },
   { files: ['src/renderer/**/*.ts'], ...typed('./tsconfig.renderer.json') },
   { files: ['tests/**/*.ts'], ...typed('./tsconfig.test.json') },
+  { files: ['tools/**/*.ts'], ...typed('./tsconfig.tools.json') },
   // Plain JS/config files: no type information.
   {
     files: ['**/*.mjs', '**/*.config.ts', '**/*.config.mts'],

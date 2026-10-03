@@ -10,13 +10,16 @@
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/build-assets.mjs",
     "start": "npm run build && electron .",
     "start:tray": "npm run build && electron . --tray",
-    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.tools.json",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "audit:deps": "npm audit --audit-level=high",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "perf:idle": "npm run build && node tools/perf/run.ts --scenario idle",
+    "perf:ui": "npm run build && node tools/perf/run.ts --scenario ui",
+    "perf:soak": "npm run build && node tools/perf/run.ts --scenario soak --minutes 30"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
