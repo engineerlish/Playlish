@@ -10,6 +10,7 @@ import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
+import { SessionHolder } from './session-holder';
 import { SettingsStore } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
@@ -308,21 +309,27 @@ function restartHost(): void {
   createHostWindow();
 }
 
-/** Creates the login and the API client for a Client ID (again if it changed). */
+// One login per Client ID. The stored session is only forgotten when the Client ID changes, never at start-up.
+const sessions = new SessionHolder<Auth>({
+  create: (id) => {
+    clientId = id;
+    const session = new Auth(id, redirectUriFor(serverPort), {
+      onRefreshToken: (token) => tokens?.save(id, token),
+      onSessionExpired: () => {
+        tokens?.clear();
+        authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
+      },
+    });
+    spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue });
+    return session;
+  },
+  forgetStoredSession: () => tokens?.clear(),
+});
+
+/** The login (and API client) for a Client ID; a new one only if the Client ID changed. */
 function startSession(id: string): Auth {
-  if (auth && clientId === id) return auth;
-  clientId = id;
-  tokens?.clear();
-  const session = new Auth(id, redirectUriFor(serverPort), {
-    onRefreshToken: (token) => tokens?.save(id, token),
-    onSessionExpired: () => {
-      tokens?.clear();
-      authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
-    },
-  });
-  auth = session;
-  spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue });
-  return session;
+  auth = sessions.use(id);
+  return auth;
 }
 
 /** Tells everything waiting for the player whether Spotify accepted it. */
