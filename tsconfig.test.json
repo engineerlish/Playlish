@@ -8,7 +8,8 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["tests/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "src/renderer/fade.ts", "src/renderer/stall.ts", "tools/perf/analysis.ts"]
+  "include": ["tests/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "src/renderer/fade.ts", "src/renderer/stall.ts", "tools/perf/analysis.ts", "tools/issues/format.ts"]
 }
