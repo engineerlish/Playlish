@@ -23,6 +23,7 @@ import {
   summarize,
   type Budgets,
   type Check,
+  type PerfSample,
   type Summary,
   type Trend,
 } from './analysis.ts';
@@ -47,6 +48,10 @@ export interface PerfResult {
   startup: { trayMs: number | null; uiMs: number | null; wallClockMs: number | null };
   summary: Summary | null;
   trend: Trend | null;
+  /** Which samples the trend used. */
+  trendScope: string | null;
+  /** Raw samples of the measured window, kept so a failure can be investigated afterwards. */
+  samples: PerfSample[];
   checks: Check[];
   pass: boolean;
 }
@@ -168,7 +173,11 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
     const logText = readText(logFile);
     const samples = samplesSince(parsePerfCsv(readText(csvFile)), measureFrom);
     const summary = summarize(samples);
-    const trend = options.scenario === 'soak' ? memoryTrend(samples) : null;
+    // During a soak the UI window opens and closes every few seconds and holds ~35 MB while open. Mixing both states
+    // makes the trend depend on where samples happen to land, so compare like with like: UI-closed (tray) samples.
+    const trayOnly = samples.filter((s) => s.uiOpen === false);
+    const trend = options.scenario === 'soak' ? memoryTrend(trayOnly.length >= 10 ? trayOnly : samples) : null;
+    const trendScope = options.scenario === 'soak' ? (trayOnly.length >= 10 ? 'UI-closed samples' : 'all samples') : null;
     const startup = { trayMs: findMilestone(logText, 'STARTUP_TRAY'), uiMs: findMilestone(logText, 'STARTUP_UI'), wallClockMs };
 
     const checks: Check[] = [];
@@ -196,6 +205,8 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
       startup,
       summary,
       trend,
+      trendScope,
+      samples,
       checks,
       pass: checks.every((c) => c.pass),
     };
@@ -214,7 +225,7 @@ function toMarkdown(result: PerfResult): string {
     s ? `Samples: ${s.samples} · private avg ${s.privateMbAvg} MB, max ${s.privateMbMax} MB · CPU avg ${s.cpuPercentAvg}%, max ${s.cpuPercentMax}% · up to ${s.processesMax} processes` : 'No samples.',
     `Startup: tray ${result.startup.trayMs ?? 'n/a'} ms, UI ${result.startup.uiMs ?? 'n/a'} ms (wall clock to milestone ${result.startup.wallClockMs ?? 'n/a'} ms)`,
     ...(result.trend
-      ? [`Trend over ${result.trend.samplesUsed} samples: ${result.trend.startMb} MB to ${result.trend.endMb} MB (${result.trend.growthPercent}%), slope ${result.trend.slopeMbPerHour} MB/h`]
+      ? [`Trend over ${result.trend.samplesUsed} ${result.trendScope ?? 'samples'}: ${result.trend.startMb} MB to ${result.trend.endMb} MB (${result.trend.growthPercent}%), slope ${result.trend.slopeMbPerHour} MB/h`]
       : []),
     `Machine: ${result.machine.cpu}, ${result.machine.cores} cores, ${result.machine.memoryGb} GB, ${result.machine.os}; Electron ${result.electron}`,
     '',

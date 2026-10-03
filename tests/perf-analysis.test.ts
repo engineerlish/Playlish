@@ -35,9 +35,21 @@ describe('parsePerfCsv', () => {
     ].join('\r\n');
 
     expect(parsePerfCsv(text)).toEqual([
-      { time: '2026-10-03T12:00:05.000Z', processes: 2, workingSetMb: 119.6, privateMb: 76, cpuPercent: 0.03 },
-      { time: '2026-10-03T12:00:15.000Z', processes: 3, workingSetMb: 236.3, privateMb: 112.8, cpuPercent: 0.48 },
+      { time: '2026-10-03T12:00:05.000Z', processes: 2, workingSetMb: 119.6, privateMb: 76, cpuPercent: 0.03, playing: false, uiOpen: false },
+      { time: '2026-10-03T12:00:15.000Z', processes: 3, workingSetMb: 236.3, privateMb: 112.8, cpuPercent: 0.48, playing: false, uiOpen: true },
     ]);
+  });
+});
+
+describe('parsePerfCsv flags', () => {
+  it('leaves the flags out when an older file has no such columns', () => {
+    expect(parsePerfCsv('2026-10-03T12:00:05.000Z,2,119.6,76,0.03')[0]).toEqual({
+      time: '2026-10-03T12:00:05.000Z',
+      processes: 2,
+      workingSetMb: 119.6,
+      privateMb: 76,
+      cpuPercent: 0.03,
+    });
   });
 });
 

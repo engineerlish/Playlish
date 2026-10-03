@@ -10,6 +10,9 @@ export interface PerfSample {
   workingSetMb: number;
   privateMb: number;
   cpuPercent: number;
+  /** Whether the UI window was open when the sample was taken (from perf.csv; absent in older files). */
+  uiOpen?: boolean;
+  playing?: boolean;
 }
 
 /** Budgets from docs/PROPOSAL.md section 2 (perf/budgets.json). */
@@ -62,7 +65,7 @@ export function parsePerfCsv(text: string): PerfSample[] {
   for (const line of text.split(/\r?\n/)) {
     const cols = line.split(',');
     if (cols.length < 5 || !/^\d{4}-\d\d-\d\dT/.test(cols[0] ?? '')) continue;
-    const [time, processes, workingSetMb, privateMb, cpuPercent] = cols;
+    const [time, processes, workingSetMb, privateMb, cpuPercent, playing, uiOpen] = cols;
     const numbers = [processes, workingSetMb, privateMb, cpuPercent].map(Number);
     if (numbers.some((n) => !Number.isFinite(n))) continue;
     samples.push({
@@ -71,6 +74,8 @@ export function parsePerfCsv(text: string): PerfSample[] {
       workingSetMb: numbers[1] ?? 0,
       privateMb: numbers[2] ?? 0,
       cpuPercent: numbers[3] ?? 0,
+      ...(playing === '0' || playing === '1' ? { playing: playing === '1' } : {}),
+      ...(uiOpen === '0' || uiOpen === '1' ? { uiOpen: uiOpen === '1' } : {}),
     });
   }
   return samples;
