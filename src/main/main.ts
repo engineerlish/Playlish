@@ -1,12 +1,13 @@
-import { BrowserWindow, Menu, Tray, app, components, ipcMain, nativeImage, safeStorage, shell } from 'electron';
+import { BrowserWindow, Menu, Tray, app, components, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PlaybackState, PlayerCommand, Snapshot, UiCommand } from '../shared/types';
-import { initLogging } from './app-logging';
+import { appInfo, initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
 import { loadConfig, redirectUriFor, type SpikeConfig } from './config';
 import { ErrorBurstLimiter } from './error-burst';
-import { installProcessHandlers } from './logging/crash';
+import { installProcessHandlers, type CrashReport } from './logging/crash';
+import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
 import { resultPage, startServer } from './server';
 import { SpotifyApiError, describeApiError, startPlayback } from './spotify';
@@ -49,6 +50,7 @@ let deviceId: string | null = null;
 let playback: PlaybackState | null = null;
 let status = 'Starting…';
 let startedPlayback = false;
+let crashNotice: CrashReport | null = null;
 const playbackErrors = new ErrorBurstLimiter();
 // CHANGE HERE: give up restarting a stalling player after this many restarts inside the window.
 const stallRestarts = new ErrorBurstLimiter(3, 5 * 60_000);
@@ -77,6 +79,92 @@ function loadRefreshToken(): string | null {
   }
 }
 
+/** File remembering which crash reports the user has already been asked about. */
+function diagnosticsStateFile(): string {
+  return path.join(logging.logsDir, 'diagnostics-state.json');
+}
+
+/** Crash ids the user has already been asked about. */
+function seenCrashIds(): Set<string> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(diagnosticsStateFile(), 'utf8')) as { seenCrashIds?: unknown };
+    return new Set(Array.isArray(parsed.seenCrashIds) ? parsed.seenCrashIds.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Remembers that the user has been asked about a crash (keeps the list short). */
+function markCrashSeen(report: CrashReport): void {
+  const ids = [...seenCrashIds(), crashId(report)].slice(-50);
+  try {
+    fs.writeFileSync(diagnosticsStateFile(), JSON.stringify({ seenCrashIds: ids }));
+  } catch (err) {
+    log.warn('Could not save the crash notice state', { code: 'DIAGNOSTICS_STATE', error: err });
+  }
+}
+
+/** Reads a text file, or returns an empty string. */
+function readTextFile(file: string): string {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+/** The app log and its rotated copies, newest first. */
+function appLogTexts(): string[] {
+  return [logging.logFile, `${logging.logFile}.1`, `${logging.logFile}.2`].map(readTextFile).filter((t) => t !== '');
+}
+
+/** Opens a pre-filled issue in the browser, after checking the URL really points at the project. */
+function openIssue(url: string): void {
+  if (!url.startsWith(`${NEW_ISSUE_URL}?`)) return;
+  void shell.openExternal(url);
+}
+
+/** Lets the user save a redacted diagnostics bundle and shows it in Explorer. */
+async function exportDiagnostics(): Promise<void> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const parent = uiWindow && !uiWindow.isDestroyed() ? uiWindow : undefined;
+  const options = {
+    title: 'Export diagnostics',
+    defaultPath: path.join(app.getPath('documents'), `playlish-diagnostics-${stamp}.txt`),
+    filters: [{ name: 'Text', extensions: ['txt'] }],
+  };
+  const choice = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
+  if (choice.canceled || !choice.filePath) return;
+  const crashes = logging.crashes
+    .list()
+    .slice(0, 3)
+    .map((f) => logging.crashes.read(f))
+    .filter((r): r is CrashReport => r !== null);
+  const bundle = buildDiagnosticsBundle({
+    generatedAt: new Date(),
+    app: appInfo(),
+    state: {
+      status,
+      configured: configError === null,
+      loggedIn: auth?.isLoggedIn() ?? false,
+      playerReady: deviceId !== null,
+      playing: playback !== null && !playback.paused,
+    },
+    appLogs: appLogTexts(),
+    pluginLogs: [path.join(logging.logsDir, 'plugins.log')].map(readTextFile).filter((t) => t !== ''),
+    crashes,
+  });
+  try {
+    fs.writeFileSync(choice.filePath, bundle);
+    log.info('Diagnostics exported', { code: 'DIAGNOSTICS_EXPORTED' });
+    shell.showItemInFolder(choice.filePath);
+    setStatus('Diagnostics saved. Please read the file before sharing it.');
+  } catch (err) {
+    log.error('Could not save diagnostics', { code: 'DIAGNOSTICS_EXPORT_FAILED', error: err });
+    setStatus(`Could not save diagnostics: ${(err as Error).message}`);
+  }
+}
+
 /** Builds the snapshot the UI renders. */
 function snapshot(): Snapshot {
   return {
@@ -87,6 +175,7 @@ function snapshot(): Snapshot {
     playback,
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
+    crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
   };
 }
 
@@ -305,6 +394,25 @@ function registerIpc(): void {
   // UI -> main
   ipcMain.on('ui:login', () => void login());
   ipcMain.on('ui:request-snapshot', () => pushSnapshot());
+  ipcMain.on('ui:export-diagnostics', () => void exportDiagnostics());
+  ipcMain.on('ui:report-issue', () => {
+    openIssue(
+      buildIssueUrl({
+        kind: 'bug',
+        title: 'Problem report',
+        summary: `Describe what happened here. (Status when reported: ${status})`,
+        app: appInfo(),
+        details: lastLines(appLogTexts(), 60),
+      }),
+    );
+  });
+  ipcMain.on('ui:crash-notice', (_event, action: 'report' | 'dismiss') => {
+    if (!crashNotice) return;
+    if (action === 'report') openIssue(buildIssueUrl(crashIssue(crashNotice, appInfo())));
+    markCrashSeen(crashNotice);
+    crashNotice = null;
+    pushSnapshot();
+  });
   ipcMain.on('ui:command', (_event, command: UiCommand) => {
     if (command.type === 'playTrack') {
       void playConfiguredTrack();
@@ -399,6 +507,10 @@ async function main(): Promise<void> {
 
   await cdmReady;
   metrics.start();
+  // Offer to report the newest crash once, on the next start after it happened.
+  const newestCrash = logging.crashes.list()[0];
+  const report = newestCrash ? logging.crashes.read(newestCrash) : null;
+  crashNotice = unseenCrash(report ? [report] : [], seenCrashIds());
   const saved = auth ? loadRefreshToken() : null;
   if (auth && saved) {
     auth.restore(saved);

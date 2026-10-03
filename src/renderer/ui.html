@@ -30,6 +30,14 @@
 
   <div class="panel" id="configPanel" hidden></div>
 
+  <div class="panel" id="crashPanel" hidden>
+    <div id="crashText"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="crashReport" class="primary">Report it</button>
+      <button id="crashDismiss">Dismiss</button>
+    </div>
+  </div>
+
   <div class="panel row">
     <button id="login" class="primary">Log in with Spotify</button>
     <button id="play" disabled>Play test track</button>
@@ -52,6 +60,11 @@
     <div><strong>Resources</strong> <span class="muted">(all processes, sampled every 5 s)</span></div>
     <div id="metrics" class="muted">Waiting for first sample…</div>
     <div class="muted">Log: <code id="logPath"></code></div>
+  </div>
+
+  <div class="panel row">
+    <button id="reportIssue">Report an issue</button>
+    <button id="exportDiagnostics">Export diagnostics</button>
   </div>
 
   <script type="module" src="/ui.js"></script>
