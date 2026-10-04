@@ -41,6 +41,8 @@ export function usePagedList(list: LibraryList): PagedList {
   const generation = useRef(0);
   const listRef = useRef(list);
   listRef.current = list;
+  /** The rows last asked for, so a reload can load what is on screen again (not only the first page). */
+  const lastRange = useRef<[number, number]>([0, 0]);
 
   const load = useCallback((page: number) => {
     if (pages.current.has(page) || loading.current.has(page)) return;
@@ -74,6 +76,7 @@ export function usePagedList(list: LibraryList): PagedList {
 
   const want = useCallback(
     (first: number, last: number) => {
+      lastRange.current = [first, last];
       const from = Math.floor(Math.max(0, first) / PAGE_ROWS);
       const to = Math.floor(Math.max(0, last) / PAGE_ROWS);
       for (let p = from; p <= to; p++) load(p);
@@ -97,5 +100,15 @@ export function usePagedList(list: LibraryList): PagedList {
     return out;
   };
 
-  return { total, rowAt, want, error, loadedFrom, reload: reset };
+  // A reload (after removing a song) keeps the list and its scroll position: the total stays until the new pages
+  // arrive, and the rows on screen are asked for again (the list only asks when the visible range changes).
+  const reload = useCallback(() => {
+    generation.current++;
+    pages.current.clear();
+    loading.current.clear();
+    setVersion((v) => v + 1);
+    want(...lastRange.current);
+  }, [want]);
+
+  return { total, rowAt, want, error, loadedFrom, reload };
 }
