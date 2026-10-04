@@ -24,6 +24,11 @@ export default tseslint.config(
   { files: ['src/renderer/ui/**/*.ts', 'src/renderer/ui/**/*.tsx'], ...typed('./tsconfig.ui.json') },
   { files: ['tests/**/*.ts'], ...typed('./tsconfig.test.json') },
   { files: ['tools/**/*.ts'], ...typed('./tsconfig.tools.json') },
+  // The Web Playback SDK stub runs in the playback host page (a browser), not in Node.
+  {
+    files: ['tests/e2e/fixtures/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: { window: 'readonly', setTimeout: 'readonly' } },
+  },
   // Plain JS/config files: no type information.
   {
     files: ['**/*.mjs', '**/*.config.ts', '**/*.config.mts'],

@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-export const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
-export const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+export const ACCOUNTS_BASE = 'https://accounts.spotify.com';
+export const AUTHORIZE_URL = `${ACCOUNTS_BASE}/authorize`;
+export const TOKEN_URL = `${ACCOUNTS_BASE}/api/token`;
 // CHANGE HERE: scopes requested at login.
 // - The Web Playback SDK rejects tokens without `streaming`, `user-read-email` and `user-read-private`.
 // - Playback state and control, the queue and the currently playing item: `user-read-playback-state`,
@@ -64,6 +65,8 @@ export interface AuthDeps {
   onRefreshToken?: (refreshToken: string) => void;
   /** Called when Spotify rejects the refresh token, so the caller can delete the stored session. */
   onSessionExpired?: () => void;
+  /** Accounts service address; only the end-to-end tests change it, to a fake server on 127.0.0.1 (see e2e.ts). */
+  accountsBase?: string;
 }
 
 /**
@@ -83,6 +86,8 @@ export class Auth {
   private readonly now: () => number;
   private readonly onRefreshToken: (refreshToken: string) => void;
   private readonly onSessionExpired: () => void;
+  private readonly authorizeUrl: string;
+  private readonly tokenUrl: string;
 
   constructor(
     private readonly clientId: string,
@@ -93,6 +98,9 @@ export class Auth {
     this.now = deps.now ?? Date.now;
     this.onRefreshToken = deps.onRefreshToken ?? (() => undefined);
     this.onSessionExpired = deps.onSessionExpired ?? (() => undefined);
+    const base = deps.accountsBase ?? ACCOUNTS_BASE;
+    this.authorizeUrl = `${base}/authorize`;
+    this.tokenUrl = `${base}/api/token`;
   }
 
   /** Restores a session from a previously saved refresh token; the first getAccessToken() call will refresh it. */
@@ -134,7 +142,7 @@ export class Auth {
     const challenge = base64Url(createHash('sha256').update(verifier).digest());
     const state = base64Url(randomBytes(16));
 
-    const url = new URL(AUTHORIZE_URL);
+    const url = new URL(this.authorizeUrl);
     url.search = new URLSearchParams({
       client_id: this.clientId,
       response_type: 'code',
@@ -248,7 +256,7 @@ export class Auth {
 
   /** POSTs to the token endpoint (PKCE: client_id only, no secret). */
   private async postToken(body: Record<string, string>): Promise<TokenResponse> {
-    const res = await this.fetchFn(TOKEN_URL, {
+    const res = await this.fetchFn(this.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: this.clientId, ...body }),

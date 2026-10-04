@@ -74,6 +74,23 @@ describe('Auth: starting a login', () => {
     expect(url.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
+  it('uses another accounts address only when one is injected (end-to-end tests)', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    const auth = new Auth(CLIENT_ID, REDIRECT_URI, { fetch: fetchMock, accountsBase: 'http://127.0.0.1:5001' });
+    const opened: string[] = [];
+    const login = auth.startLogin((url) => {
+      opened.push(url);
+      return Promise.resolve();
+    });
+    const url = new URL(opened[0] ?? 'http://missing');
+    fetchMock.mockResolvedValueOnce(tokenResponse({}));
+    await auth.handleCallback(new URLSearchParams({ code: 'the-code', state: url.searchParams.get('state') ?? '' }));
+    await login;
+
+    expect(`${url.origin}${url.pathname}`).toBe('http://127.0.0.1:5001/authorize');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:5001/api/token');
+  });
+
   it('requests the scopes the Web Playback SDK needs', () => {
     const { begin } = setup();
 
