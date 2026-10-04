@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
+    // Tests use a node:http fetch instead of the built-in one, which crashed Windows test workers at exit.
+    setupFiles: ['tests/helpers/use-http-fetch.ts'],
     environment: 'node',
     clearMocks: true,
     restoreMocks: true,
