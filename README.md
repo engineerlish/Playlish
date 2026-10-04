@@ -44,7 +44,7 @@ Press Play to continue where your account left off, or pick something from the L
 
 - Login uses Spotify's PKCE flow; no client secret exists anywhere. Your Client ID stays in Playlish's settings on your computer.
 - Only the refresh token is stored, encrypted with Windows' own protection for your account (DPAPI through Electron's safeStorage). The access token stays in memory.
-- Playlish talks only to Spotify. There is no telemetry. Logs stay on your computer, and tokens, Client IDs and email addresses are removed before anything is written.
+- Playlish talks only to Spotify, plus one request a day to GitHub to see whether a new version exists (only while the window is open; nothing about you is sent; turn it off in Settings). There is no telemetry. Logs stay on your computer, and tokens, Client IDs and email addresses are removed before anything is written.
 - "Report an issue" and "Export diagnostics" (Settings) open or save a redacted report that you can read before sharing.
 - The window's content security policy allows no remote scripts; plugins (0.3.0) will run sandboxed and never see your login.
 

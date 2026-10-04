@@ -7,6 +7,12 @@ const PREFERENCES: { key: PreferenceKey; id: string; label: string; hint: string
   { key: 'closeToTray', id: 'prefCloseToTray', label: 'Keep Playlish running in the tray when the window is closed', hint: 'Off: closing the window quits Playlish.' },
   { key: 'minimizeToTray', id: 'prefMinimizeToTray', label: 'Minimize to the tray', hint: 'The window closes to the tray icon instead of the taskbar.' },
   { key: 'startMinimized', id: 'prefStartMinimized', label: 'Start in the tray', hint: 'Playlish starts with only its tray icon; click it to open the window.' },
+  {
+    key: 'checkForUpdates',
+    id: 'prefCheckForUpdates',
+    label: 'Check for new versions',
+    hint: 'Once a day while the window is open, Playlish asks GitHub for the latest release. Nothing about you is sent.',
+  },
 ];
 
 /** Account, diagnostics and the resource readout. Audio settings arrive in 0.2.0. */
@@ -36,7 +42,7 @@ export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
       </section>
 
       <section class="card">
-        <h2>Tray and start-up</h2>
+        <h2>Tray, start-up and updates</h2>
         {PREFERENCES.map((p) => (
           <label class="check" key={p.key} for={p.id}>
             <input

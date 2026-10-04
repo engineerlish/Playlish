@@ -13,6 +13,7 @@ const api: UiApi = {
   refreshDevices: () => ipcRenderer.send('ui:devices-refresh'),
   transfer: (deviceId) => ipcRenderer.send('ui:transfer', deviceId),
   setPreference: (key, value) => ipcRenderer.send('ui:set-preference', key, value),
+  openUpdate: () => ipcRenderer.send('ui:open-update'),
   restart: (safeMode) => ipcRenderer.send('ui:restart', safeMode),
   library: (list, offset) => ipcRenderer.invoke('ui:library', list, offset) as Promise<LibraryResult>,
   libraryAction: (action) => ipcRenderer.invoke('ui:library-action', action) as Promise<ActionResult>,

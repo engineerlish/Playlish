@@ -33,6 +33,10 @@ export interface Settings {
   minimizeToTray: boolean;
   /** Start with only the tray icon. */
   startMinimized: boolean;
+  /** Look for a new Playlish release at most once a day while the window is open (#80). */
+  checkForUpdates: boolean;
+  /** When the last update check ran (epoch ms), or null. */
+  lastUpdateCheck: number | null;
   window: WindowState;
   lastPage: Page;
   /** Volume (0..1) remembered per audio output device id; used from 0.2.0. */
@@ -46,13 +50,15 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   closeToTray: true,
   minimizeToTray: false,
   startMinimized: false,
+  checkForUpdates: true,
+  lastUpdateCheck: null,
   window: Object.freeze({ width: 1100, height: 720, x: null, y: null, maximized: false }),
   lastPage: 'library',
   deviceVolumes: Object.freeze({}) as Record<string, number>,
 });
 
 /** On/off settings the user changes on the Settings page. */
-export const PREFERENCE_KEYS = ['closeToTray', 'minimizeToTray', 'startMinimized'] as const;
+export const PREFERENCE_KEYS = ['closeToTray', 'minimizeToTray', 'startMinimized', 'checkForUpdates'] as const;
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
 
 /** True for a known on/off setting name. */
@@ -115,6 +121,11 @@ export function validateSettings(input: unknown): { settings: Settings; problems
     if (raw[key] === undefined) continue;
     if (typeof raw[key] === 'boolean') settings[key] = raw[key];
     else bad(key);
+  }
+  if (raw['lastUpdateCheck'] !== undefined) {
+    const v = raw['lastUpdateCheck'];
+    if (v === null || (typeof v === 'number' && Number.isInteger(v) && v >= 0)) settings.lastUpdateCheck = v;
+    else bad('lastUpdateCheck');
   }
   if (raw['window'] !== undefined) {
     const w = raw['window'];

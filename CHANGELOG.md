@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Update check: once a day, while the window is open, Playlish asks GitHub for the latest release and shows a banner with a link to it when it is newer. Nothing about you is sent, it only ever links to this project's release pages, and it can be turned off in Settings. Installing stays manual.
 - Album art in the Now Playing bar: the smallest image that looks sharp at the bar's size. The main window may now load images from Spotify's image servers (`i.scdn.co`, `mosaic.scdn.co`, `*.spotifycdn.com`) and nothing else.
 - CI files an issue for each failed or flaky test on main and in the nightly run (`tools/issues/ci-report.ts`): one issue per failure, a comment when it happens again, reopened with the regression label if it was closed, at most 10 per run. They use the shared redacted issue format and appear as github-actions[bot].
 - Plugins page: lists installed plugins (none until the plugin system arrives in 0.3.0) and explains what is coming. Safe mode starts Playlish with every plugin off: from the Plugins page (Restart in safe mode), with `--safe-mode`, or with `PLAYLISH_SAFE_MODE=1`.
