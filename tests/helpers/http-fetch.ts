@@ -16,8 +16,11 @@ export async function httpFetch(input: string | URL | Request, init: RequestInit
   new Headers(init.headers).forEach((value, key) => {
     headers[key] = value;
   });
-  const body = init.body === undefined || init.body === null ? undefined : init.body instanceof URLSearchParams ? init.body.toString() : String(init.body);
-  if (body !== undefined && init.body instanceof URLSearchParams && !headers['content-type']) headers['content-type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+  const raw = init.body;
+  // The code under test only sends strings (JSON) and URLSearchParams (token requests).
+  if (raw !== undefined && raw !== null && typeof raw !== 'string' && !(raw instanceof URLSearchParams)) throw new TypeError('test fetch only sends string or URLSearchParams bodies');
+  const body = raw === undefined || raw === null ? undefined : raw.toString();
+  if (raw instanceof URLSearchParams && !headers['content-type']) headers['content-type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
   if (body !== undefined) headers['content-length'] = String(Buffer.byteLength(body));
 
   return new Promise((resolve, reject) => {
