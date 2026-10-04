@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- CI files an issue for each failed or flaky test on main and in the nightly run (`tools/issues/ci-report.ts`): one issue per failure, a comment when it happens again, reopened with the regression label if it was closed, at most 10 per run. They use the shared redacted issue format and appear as github-actions[bot].
 - Plugins page: lists installed plugins (none until the plugin system arrives in 0.3.0) and explains what is coming. Safe mode starts Playlish with every plugin off: from the Plugins page (Restart in safe mode), with `--safe-mode`, or with `PLAYLISH_SAFE_MODE=1`.
 - Queue: what plays now and what comes next (up to 20, as Spotify shows), loaded when you open the page and whenever the track changes, never on a timer. Add songs with + from any list.
 - Search: songs, albums, artists and playlists as you type (after a short pause), 10 results per kind with More for the next 10 (the API's maximum per page). Play a song (the results after it follow), an artist, an album or a playlist; open albums and playlists; add songs to the queue or Liked Songs.

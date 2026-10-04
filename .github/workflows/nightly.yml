@@ -13,6 +13,9 @@ jobs:
     name: Full suite and dependency audit
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
 
@@ -46,6 +49,14 @@ jobs:
         run: |
           node scripts/ci-summary.mjs ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Failed or flaky tests in the nightly run become issues (#14), as github-actions[bot] with the built-in token.
+      - name: File issues for failed or flaky tests
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/issues/ci-report.ts --vitest test-results.json
 
       - name: Upload reports
         if: always()
