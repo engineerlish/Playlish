@@ -250,6 +250,8 @@ export interface Snapshot {
   plugins: { id: string; name: string; version: string; enabled: boolean }[];
   /** The tray and start-up options on the Settings page. */
   preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean; checkForUpdates: boolean };
+  /** Name of the chosen output device (#89), or null for the system default. */
+  output: string | null;
   /** A newer release, when the update check found one (#80). */
   update: { version: string } | null;
   metrics: MetricsSample | null;
@@ -298,6 +300,8 @@ export interface UiApi {
   setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized' | 'checkForUpdates', value: boolean): void;
   /** Opens the release page of the update in the browser. */
   openUpdate(): void;
+  /** Plays on the output device with this name, or the system default (null). */
+  setOutput(name: string | null): void;
   /** One page of a library list (fetched on demand; nothing is kept in the main process beyond the API cache). */
   library(list: LibraryList, offset: number): Promise<LibraryResult>;
   /** Plays, queues, saves or removes library items. */

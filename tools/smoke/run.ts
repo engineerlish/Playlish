@@ -252,6 +252,7 @@ async function playbackChecks(): Promise<void> {
   record({ id: 'fade', name: 'Fade pause and fade resume', status: faded < SILENCE && back > SOUND ? 'pass' : 'fail', details: `after fade-out ${faded}, after fade-in ${back}`, area: 'audio', severity: 'medium' });
 
   await checkMediaOverlay();
+  await checkOutputDevice();
   await checkTransfer();
 
   // The login must survive a restart (a bug once deleted the stored session on every start).
@@ -312,6 +313,46 @@ async function checkMediaOverlay(): Promise<void> {
 }
 
 /**
+ * Output device switching (#89): Playlish plays on a device other than the Windows default (the meter, which listens to
+ * the default device, must go quiet), then back on the default (sound must return). Needs a second output device.
+ */
+async function checkOutputDevice(): Promise<void> {
+  const name = 'Output device switching';
+  await click(DEVTOOLS_PORT, 'nav-settings');
+  await sleep(1500);
+  const choice = (await evaluate(
+    DEVTOOLS_PORT,
+    '/ui.html',
+    `(async () => {
+      const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput');
+      const def = devices.find((d) => d.deviceId === 'default');
+      const defaultName = def ? def.label.replace(/^Default - /, '') : '';
+      const other = devices.find((d) => d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label && d.label !== defaultName);
+      return { defaultName, other: other ? other.label : null };
+    })()`,
+  )) as { defaultName: string; other: string | null } | null;
+  if (!choice?.other) {
+    record({ id: 'output-device', name, status: 'skipped', details: 'Only one output device; connect headphones or another device to include this check.', area: 'audio', severity: 'low' });
+    return;
+  }
+  const setOutput = (device: string | null) => evaluate(DEVTOOLS_PORT, '/ui.html', `window.ui.setOutput(${JSON.stringify(device)}), true`);
+  await setOutput(choice.other);
+  await sleep(3000);
+  const onOther = meter(1500);
+  await setOutput(null);
+  await sleep(3000);
+  const back = bestOf(2, 2000);
+  record({
+    id: 'output-device',
+    name,
+    status: onOther < SILENCE && back > SOUND ? 'pass' : 'fail',
+    details: `on "${choice.other}": peak on the default device (${choice.defaultName}) ${onOther}; back on the default: peak ${back}`,
+    area: 'audio',
+    severity: 'medium',
+  });
+}
+
+/**
  * Moves playback to another Spotify device and back (#44): this computer must go silent, then play again. Needs a
  * second device that is online (a phone or speaker with Spotify open); without one the step is skipped.
  */
@@ -363,7 +404,6 @@ async function checkTransfer(): Promise<void> {
 /** Steps for features that do not exist yet; they become real checks as the MVP lands. */
 function notYetAvailable(): void {
   for (const [id, name, area] of [
-    ['output-device', 'Output device switching', 'audio'],
     ['eq', 'Equalizer APO preset switching', 'audio'],
   ] as const) {
     record({ id, name, status: 'not-available', details: 'feature not built yet', area, severity: 'low' });
