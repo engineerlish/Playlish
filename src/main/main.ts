@@ -704,6 +704,7 @@ function registerIpc(): void {
   });
   ipcMain.handle('ui:library', (_event, list: unknown, offset: unknown) => library.page(list, offset));
   ipcMain.handle('ui:library-action', (_event, action: unknown) => library.action(action));
+  ipcMain.handle('ui:search', (_event, query: unknown, kind: unknown, offset: unknown) => library.search(query, kind, offset));
   ipcMain.on('ui:transfer', (_event, id: unknown) => {
     if (typeof id === 'string') void devices.transfer(id);
   });

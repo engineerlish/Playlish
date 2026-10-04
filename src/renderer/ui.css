@@ -160,6 +160,15 @@ button.icon.small { width: 30px; height: 30px; font-size: 16px; }
 .detail-head h1 { margin: 0; }
 .detail-head .meta { flex: 1; min-width: 0; }
 
+/* Search (#48). */
+#searchInput { width: 100%; max-width: 560px; font-size: 15px; padding: 8px 12px; border-radius: 20px; }
+.search-body { overflow-y: auto; min-height: 0; flex: 1; }
+.search-section { margin: 12px 0 16px; }
+.search-section h2 { margin-bottom: 4px; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+.search-row { height: 56px; }
+.hidden { display: none; }
+
 /* First-run wizard. */
 .wizard { max-width: 640px; margin: 0 auto; padding: 24px 20px; }
 .wizard ol, .wizard ul { padding-left: 20px; }

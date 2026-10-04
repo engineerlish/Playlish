@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LibraryService, MAX_URIS, OTHERS_PLAYLIST_NOTE, PAGE_SIZE, checkAction, checkListRequest } from '../src/main/library';
+import { LibraryService, MAX_URIS, OTHERS_PLAYLIST_NOTE, PAGE_SIZE, SEARCH_PAGE, checkAction, checkListRequest, checkSearch } from '../src/main/library';
 import { SpotifyClient } from '../src/main/spotify/client';
 import { RequestQueue } from '../src/main/spotify/queue';
 import type { PlaylistRow, TrackRow } from '../src/shared/types';
@@ -113,6 +113,53 @@ describe('library pages', () => {
     const result = await service().page({ kind: 'tracks' }, 0);
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('search (#48)', () => {
+  it('asks for one kind at a time, 10 per page (the API maximum), at the requested offset', async () => {
+    fake.on('GET', '/v1/search', ok('search.json'));
+
+    const result = await service().search('  fixture  ', 'track', 20);
+
+    const [request] = fake.requestsFor('GET', '/v1/search');
+    expect(request?.query.get('q')).toBe('fixture');
+    expect(request?.query.get('type')).toBe('track');
+    expect(request?.query.get('limit')).toBe(String(SEARCH_PAGE));
+    expect(request?.query.get('offset')).toBe('20');
+    expect(result.ok && result.page.total).toBe(124);
+    expect(result.ok && result.page.rows).toHaveLength(10);
+  });
+
+  it('turns albums, artists and playlists into rows, leaving out the null playlists Spotify sometimes sends', async () => {
+    fake.on('GET', '/v1/search', ok('search.json'));
+    const s = service();
+
+    const albums = await s.search('fixture', 'album', 0);
+    const artists = await s.search('fixture', 'artist', 0);
+    const playlists = await s.search('fixture', 'playlist', 0);
+
+    expect(albums.ok && albums.page.rows.map((r) => r?.kind)).toEqual(['album']);
+    expect(artists.ok && artists.page.rows[0]).toMatchObject({ kind: 'artist', name: 'Fixture Artist 1' });
+    expect(playlists.ok && playlists.page.rows.map((r) => r?.kind === 'playlist' && [r.name, r.canList])).toEqual([['Fixture Playlist', true]]);
+  });
+
+  it('reports a failed search as a message', async () => {
+    fake.on('GET', '/v1/search', { status: 500, body: { error: { status: 500, message: 'Server error' } } });
+
+    expect((await service().search('x', 'track', 0)).ok).toBe(false);
+  });
+
+  it.each([
+    ['', 'track', 0, 'Type something to search for.'],
+    ['   ', 'track', 0, 'Type something to search for.'],
+    ['x'.repeat(201), 'track', 0, 'Type something to search for.'],
+    ['ok', 'show', 0, 'Unknown kind of result.'],
+    ['ok', 'track', 5, 'Invalid position in the results.'],
+    ['ok', 'track', 1000, 'Invalid position in the results.'],
+    ['ok', 'track', 990, null],
+  ])('search %j %s at %s -> %s', (query, kind, offset, expected) => {
+    expect(checkSearch(query, kind, offset)).toBe(expected);
   });
 });
 
