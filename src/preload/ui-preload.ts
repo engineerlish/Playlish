@@ -12,6 +12,7 @@ const api: UiApi = {
   navigate: (page) => ipcRenderer.send('ui:navigate', page),
   refreshDevices: () => ipcRenderer.send('ui:devices-refresh'),
   transfer: (deviceId) => ipcRenderer.send('ui:transfer', deviceId),
+  setPreference: (key, value) => ipcRenderer.send('ui:set-preference', key, value),
   setup: (action) => ipcRenderer.send('ui:setup', action),
   signOut: () => ipcRenderer.send('ui:sign-out'),
   exportDiagnostics: () => ipcRenderer.send('ui:export-diagnostics'),

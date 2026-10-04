@@ -1,5 +1,14 @@
 import type { Snapshot } from '../../../shared/types';
 
+type PreferenceKey = keyof Snapshot['preferences'];
+
+// CHANGE HERE: wording of the tray and start-up options.
+const PREFERENCES: { key: PreferenceKey; id: string; label: string; hint: string }[] = [
+  { key: 'closeToTray', id: 'prefCloseToTray', label: 'Keep Playlish running in the tray when the window is closed', hint: 'Off: closing the window quits Playlish.' },
+  { key: 'minimizeToTray', id: 'prefMinimizeToTray', label: 'Minimize to the tray', hint: 'The window closes to the tray icon instead of the taskbar.' },
+  { key: 'startMinimized', id: 'prefStartMinimized', label: 'Start in the tray', hint: 'Playlish starts with only its tray icon; click it to open the window.' },
+];
+
 /** Account, diagnostics and the resource readout. Audio settings arrive in 0.2.0. */
 export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
   const m = snapshot.metrics;
@@ -24,6 +33,24 @@ export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
             </button>
           )}
         </div>
+      </section>
+
+      <section class="card">
+        <h2>Tray and start-up</h2>
+        {PREFERENCES.map((p) => (
+          <label class="check" key={p.key} for={p.id}>
+            <input
+              id={p.id}
+              type="checkbox"
+              checked={snapshot.preferences[p.key]}
+              onChange={(e) => window.ui.setPreference(p.key, (e.target as HTMLInputElement).checked)}
+            />
+            <span>
+              {p.label}
+              <span class="muted hint">{p.hint}</span>
+            </span>
+          </label>
+        ))}
       </section>
 
       <section class="card">

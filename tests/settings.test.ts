@@ -23,6 +23,7 @@ describe('validateSettings', () => {
       version: 1,
       clientId: ID,
       closeToTray: false,
+      minimizeToTray: true,
       startMinimized: true,
       window: { width: 1280, height: 800, x: -1200, y: 40, maximized: true },
       lastPage: 'search',
@@ -32,10 +33,20 @@ describe('validateSettings', () => {
     expect(validateSettings(valid)).toEqual({ settings: valid, problems: [] });
   });
 
+  it('reads a file from before "minimize to tray" existed without complaint, with it off', () => {
+    const older = { version: 1, clientId: ID, closeToTray: true, startMinimized: false };
+
+    const { settings, problems } = validateSettings(older);
+
+    expect(problems).toEqual([]);
+    expect(settings.minimizeToTray).toBe(false);
+  });
+
   it.each([
     ['clientId', 'not-hex'],
     ['clientId', 123],
     ['closeToTray', 'yes'],
+    ['minimizeToTray', 'no'],
     ['startMinimized', 1],
     ['window', { width: 100, height: 800, x: null, y: null, maximized: false }],
     ['window', { width: 1280, height: 800, x: 1.5, y: null, maximized: false }],

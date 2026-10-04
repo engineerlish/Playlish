@@ -127,6 +127,10 @@ input[type="range"]:disabled { opacity: .5; }
 }
 .popover-title { font-weight: 600; padding: 4px 10px; }
 
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }
+.check .hint { display: block; font-size: 12px; }
+
 /* First-run wizard. */
 .wizard { max-width: 640px; margin: 0 auto; padding: 24px 20px; }
 .wizard ol, .wizard ul { padding-left: 20px; }

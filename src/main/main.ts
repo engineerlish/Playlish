@@ -15,9 +15,10 @@ import { DevicesController } from './devices';
 import { NowPlayingController } from './now-playing';
 import { resultPage, startServer } from './server';
 import { SessionHolder } from './session-holder';
-import { SettingsStore } from './settings';
+import { SettingsStore, isPreferenceKey } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
+import { trayKey, trayMenu, trayTooltip, type TrayAction, type TrayItem } from './tray-menu';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyClient } from './spotify/client';
 import { SpotifyApiError, describeApiError } from './spotify/errors';
@@ -211,6 +212,11 @@ function snapshot(): Snapshot {
     deviceReady: deviceId !== null,
     playback: nowPlaying.view(),
     devices: devices.view(),
+    preferences: {
+      closeToTray: settings?.get().closeToTray ?? true,
+      minimizeToTray: settings?.get().minimizeToTray ?? false,
+      startMinimized: settings?.get().startMinimized ?? false,
+    },
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
@@ -223,8 +229,9 @@ function snapshot(): Snapshot {
   };
 }
 
-/** Pushes the current snapshot to the UI window if one is open. */
+/** Pushes the current snapshot to the UI window if one is open, and keeps the tray menu in step. */
 function pushSnapshot(): void {
+  updateTray();
   if (uiWindow && !uiWindow.isDestroyed()) uiWindow.webContents.send('ui:snapshot', snapshot());
 }
 
@@ -240,9 +247,14 @@ function updateUiVisibility(): void {
   nowPlaying.setVisible(uiWindow !== null && !uiWindow.isDestroyed() && uiWindow.isVisible() && !uiWindow.isMinimized());
 }
 
-/** Closes the UI window (it is destroyed, not hidden). */
+/** Set while Playlish itself closes the window to the tray (minimize to tray), so that close never quits the app. */
+let closingToTray = false;
+
+/** Closes the UI window to the tray (it is destroyed, not hidden). */
 function closeUi(): void {
-  if (uiWindow && !uiWindow.isDestroyed()) uiWindow.close();
+  if (!uiWindow || uiWindow.isDestroyed()) return;
+  closingToTray = true;
+  uiWindow.close();
 }
 
 /** Opens the UI window, or focuses it if it already exists. */
@@ -287,7 +299,11 @@ function openUi(): void {
   // Other devices' playback is only polled while the window can be seen (#43).
   win.on('show', updateUiVisibility);
   win.on('hide', updateUiVisibility);
-  win.on('minimize', updateUiVisibility);
+  win.on('minimize', () => {
+    // Minimize to tray: the window is destroyed like a close, so no renderer stays behind.
+    if (settings?.get().minimizeToTray) closeUi();
+    else updateUiVisibility();
+  });
   win.on('restore', updateUiVisibility);
   // Saves are debounced by the settings store, so dragging the window does not write on every pixel.
   const saveBounds = () => {
@@ -303,6 +319,10 @@ function openUi(): void {
   uiWindow.on('closed', () => {
     uiWindow = null; // Destroyed: no renderer process remains while the app sits in the tray.
     updateUiVisibility();
+    // With "close to tray" off, closing the window quits Playlish (closes via the tray or minimize do not get here
+    // differently: both destroy the window, so only the setting decides).
+    if (settings && !settings.get().closeToTray && !closingToTray) app.quit();
+    closingToTray = false;
   });
   uiWindow.webContents.once('did-finish-load', () => {
     if (uiReadyLogged) return;
@@ -669,6 +689,11 @@ function registerIpc(): void {
   });
   ipcMain.on('ui:command', (_event, command: UiCommand) => void nowPlaying.command(command));
   ipcMain.on('ui:devices-refresh', () => void devices.refresh());
+  ipcMain.on('ui:set-preference', (_event, key: unknown, value: unknown) => {
+    if (!isPreferenceKey(key) || typeof value !== 'boolean') return;
+    settings?.update({ [key]: value });
+    pushSnapshot();
+  });
   ipcMain.on('ui:transfer', (_event, id: unknown) => {
     if (typeof id === 'string') void devices.transfer(id);
   });
@@ -678,15 +703,41 @@ function registerIpc(): void {
 function createTray(): void {
   const icon = nativeImage.createFromPath(path.join(__dirname, '../assets/tray.png'));
   tray = new Tray(icon);
-  tray.setToolTip('Playlish (spike)');
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Open Playlish', click: openUi },
-      { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() },
-    ]),
-  );
+  updateTray();
   tray.on('click', openUi);
+}
+
+let trayShown = '';
+let trayItems: TrayItem[] = [];
+
+/** Runs a tray menu entry. */
+function runTrayAction(action: TrayAction): void {
+  if (action === 'open') openUi();
+  else if (action === 'quit') app.quit();
+  else void nowPlaying.command({ type: action });
+}
+
+/** Rebuilds the tray menu and tooltip (#46), but only when what they show changed. */
+function updateTray(): void {
+  if (!tray) return;
+  const np = nowPlaying.view();
+  const canPlay = deviceId !== null;
+  const key = trayKey(np, canPlay);
+  if (key === trayShown) return;
+  trayShown = key;
+  trayItems = trayMenu(np, canPlay);
+  tray.setToolTip(trayTooltip(np));
+  tray.setContextMenu(
+    Menu.buildFromTemplate(
+      trayItems.map((item) =>
+        item.kind === 'separator'
+          ? { type: 'separator' as const }
+          : item.kind === 'label'
+            ? { label: item.label, enabled: false }
+            : { label: item.label, enabled: item.enabled, click: () => runTrayAction(item.action) },
+      ),
+    ),
+  );
 }
 
 /** App start-up: single instance, wait for the Widevine CDM, start the local server, tray, metrics and (optionally) the UI. */
@@ -725,7 +776,12 @@ async function main(): Promise<void> {
   if (e2e) {
     installSdkStub(e2e);
     // Lets the tests click the tray icon, which Playwright cannot reach.
-    (globalThis as Record<string, unknown>)['__playlishE2E'] = { clickTray: () => tray?.emit('click') };
+    (globalThis as Record<string, unknown>)['__playlishE2E'] = {
+      clickTray: () => tray?.emit('click'),
+      trayMenu: () => trayItems,
+      trayTooltip: () => (tray ? trayTooltip(nowPlaying.view()) : null),
+      clickTrayItem: (action: TrayAction) => runTrayAction(action),
+    };
   }
   // Only the refresh token is stored, encrypted with safeStorage (DPAPI); see token-store.ts and #51.
   tokens = new TokenStore(app.getPath('userData'), safeStorage, (message) => authLog.warn(message, { code: 'TOKEN_STORE' }));
@@ -801,7 +857,8 @@ async function main(): Promise<void> {
   } else {
     setStatus('Not logged in.');
   }
-  if (!process.argv.includes(TRAY_ONLY_FLAG)) openUi();
+  // "Start minimized" (or --tray): only the tray icon; the window opens from it.
+  if (!process.argv.includes(TRAY_ONLY_FLAG) && !store.get().startMinimized) openUi();
 
   // Only the performance harness sets this; it repeatedly opens and closes the UI and feeds simulated playback state.
   if (process.env['PLAYLISH_SOAK'] === '1') {

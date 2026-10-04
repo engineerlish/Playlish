@@ -163,6 +163,8 @@ export interface Snapshot {
   /** What is playing here or on another device; null when nothing is known to be playing. */
   playback: NowPlaying | null;
   devices: DevicesView;
+  /** The tray and start-up options on the Settings page. */
+  preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean };
   metrics: MetricsSample | null;
   perfLogPath: string;
   /** Set after a crash the user has not been asked about yet. */
@@ -203,6 +205,8 @@ export interface UiApi {
   refreshDevices(): void;
   /** Moves playback to a device from the list. */
   transfer(deviceId: string): void;
+  /** Turns a tray or start-up option on or off. */
+  setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized', value: boolean): void;
   /** Sends an action to the first-run wizard. */
   setup(action: SetupAction): void;
   /** Signs out: deletes the stored session and stops the player. */

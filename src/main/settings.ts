@@ -27,8 +27,10 @@ export interface Settings {
   version: number;
   /** The user's Spotify Client ID (32 hex characters), or null before setup. Not a secret under PKCE. */
   clientId: string | null;
-  /** Closing the window keeps Playlish running in the tray. */
+  /** Closing the window keeps Playlish running in the tray (otherwise closing it quits). */
   closeToTray: boolean;
+  /** Minimizing the window sends Playlish to the tray. */
+  minimizeToTray: boolean;
   /** Start with only the tray icon. */
   startMinimized: boolean;
   window: WindowState;
@@ -42,11 +44,21 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   version: SETTINGS_VERSION,
   clientId: null,
   closeToTray: true,
+  minimizeToTray: false,
   startMinimized: false,
   window: Object.freeze({ width: 1100, height: 720, x: null, y: null, maximized: false }),
   lastPage: 'library',
   deviceVolumes: Object.freeze({}) as Record<string, number>,
 });
+
+/** On/off settings the user changes on the Settings page. */
+export const PREFERENCE_KEYS = ['closeToTray', 'minimizeToTray', 'startMinimized'] as const;
+export type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
+
+/** True for a known on/off setting name. */
+export function isPreferenceKey(value: unknown): value is PreferenceKey {
+  return typeof value === 'string' && (PREFERENCE_KEYS as readonly string[]).includes(value);
+}
 
 // CHANGE HERE: limits used when validating.
 const MIN_WINDOW = 360;
@@ -99,7 +111,7 @@ export function validateSettings(input: unknown): { settings: Settings; problems
       settings.clientId = raw['clientId'];
     } else bad('clientId');
   }
-  for (const key of ['closeToTray', 'startMinimized'] as const) {
+  for (const key of PREFERENCE_KEYS) {
     if (raw[key] === undefined) continue;
     if (typeof raw[key] === 'boolean') settings[key] = raw[key];
     else bad(key);
