@@ -6,13 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Volume per output device: each output (and the system default) keeps the volume you last set on it, restored when you switch back and when Playlish starts.
+- Output device: Settings → Audio chooses where Playlish plays (by device name; System default by default). The choice is remembered; if that device is unplugged, Playlish plays on the default until it is back. The smoke test checks switching when a second output device is connected.
+
 ## [0.1.0] - 2026-10-04
 
 The first release: a lightweight Spotify player for Windows with Now Playing, Library, Search, Queue, Devices, media keys, the tray, and the groundwork for plugins.
 
 ### Added
 
-- Output device: Settings → Audio chooses where Playlish plays (by device name; System default by default). The choice is remembered; if that device is unplugged, Playlish plays on the default until it is back. The smoke test checks switching when a second output device is connected.
 - Windows packaging (`npm run dist`): a per-user installer (no administrator rights; the uninstaller can keep your settings) and a portable zip, built from the castLabs Electron, with Widevine VMP signing of the packaged app before the installer is made.
 - Update check: once a day, while the window is open, Playlish asks GitHub for the latest release and shows a banner with a link to it when it is newer. Nothing about you is sent, it only ever links to this project's release pages, and it can be turned off in Settings. Installing stays manual.
 - Album art in the Now Playing bar: the smallest image that looks sharp at the bar's size. The main window may now load images from Spotify's image servers (`i.scdn.co`, `mosaic.scdn.co`, `*.spotifycdn.com`) and nothing else.
