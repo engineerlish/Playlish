@@ -15,6 +15,7 @@ import { DevicesController } from './devices';
 import { LibraryService } from './library';
 import { NowPlayingController } from './now-playing';
 import { resultPage, startServer } from './server';
+import { relaunchArgs, isSafeMode } from './safe-mode';
 import { SessionHolder } from './session-holder';
 import { SettingsStore, isPreferenceKey } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
@@ -60,6 +61,9 @@ let clientId: string | null = null;
 let setup: SetupController | null = null;
 let playerWaiters: ((result: PlayerCheck) => void)[] = [];
 const serverPort = e2e?.port ?? DEFAULT_PORT;
+// Safe mode (#50): all plugins off for this run. The plugin system (0.3.0) reads this flag; nothing else changes.
+const safeMode = isSafeMode(process.argv, process.env);
+if (safeMode) log.warn('Started in safe mode: plugins are off', { code: 'SAFE_MODE' });
 // The smoke test (tools/smoke) needs sound without anyone picking music, so it asks for this track to start by itself
 // with PLAYLISH_SMOKE_AUTOPLAY=1. Normal starts play nothing until the user presses Play.
 const TEST_TRACK_URI = DEFAULT_TRACK_URI;
@@ -213,6 +217,8 @@ function snapshot(): Snapshot {
     deviceReady: deviceId !== null,
     playback: nowPlaying.view(),
     devices: devices.view(),
+    safeMode,
+    plugins: [],
     preferences: {
       closeToTray: settings?.get().closeToTray ?? true,
       minimizeToTray: settings?.get().minimizeToTray ?? false,
@@ -697,6 +703,12 @@ function registerIpc(): void {
   });
   ipcMain.on('ui:command', (_event, command: UiCommand) => void nowPlaying.command(command));
   ipcMain.on('ui:devices-refresh', () => void devices.refresh());
+  ipcMain.on('ui:restart', (_event, safe: unknown) => {
+    if (typeof safe !== 'boolean') return;
+    log.info(safe ? 'Restarting in safe mode' : 'Restarting normally', { code: 'RESTART' });
+    app.relaunch({ args: relaunchArgs(process.argv, safe) });
+    app.quit();
+  });
   ipcMain.on('ui:set-preference', (_event, key: unknown, value: unknown) => {
     if (!isPreferenceKey(key) || typeof value !== 'boolean') return;
     settings?.update({ [key]: value });

@@ -244,6 +244,10 @@ export interface Snapshot {
   /** What is playing here or on another device; null when nothing is known to be playing. */
   playback: NowPlaying | null;
   devices: DevicesView;
+  /** All plugins are off for this run (started with --safe-mode). */
+  safeMode: boolean;
+  /** Installed plugins; always empty until the plugin system (0.3.0). */
+  plugins: { id: string; name: string; version: string; enabled: boolean }[];
   /** The tray and start-up options on the Settings page. */
   preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean };
   metrics: MetricsSample | null;
@@ -286,6 +290,8 @@ export interface UiApi {
   refreshDevices(): void;
   /** Moves playback to a device from the list. */
   transfer(deviceId: string): void;
+  /** Restarts Playlish with all plugins off (true) or normally (false). */
+  restart(safeMode: boolean): void;
   /** Turns a tray or start-up option on or off. */
   setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized', value: boolean): void;
   /** One page of a library list (fetched on demand; nothing is kept in the main process beyond the API cache). */

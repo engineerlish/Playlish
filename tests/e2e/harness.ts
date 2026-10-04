@@ -68,6 +68,8 @@ export interface LaunchOptions {
   clientId?: string;
   /** Start with only the tray icon. */
   trayOnly?: boolean;
+  /** Start with all plugins off (--safe-mode). */
+  safeMode?: boolean;
   /** Set false when the app is expected to start without a window (for example "start in the tray"). */
   expectWindow?: boolean;
 }
@@ -90,7 +92,7 @@ export async function launch(options: LaunchOptions): Promise<Launched> {
   });
   const app = await electron.launch({
     executablePath: ELECTRON_EXE,
-    args: ['.', `--user-data-dir=${userDataDir}`, ...(options.trayOnly ? ['--tray'] : [])],
+    args: ['.', `--user-data-dir=${userDataDir}`, ...(options.trayOnly ? ['--tray'] : []), ...(options.safeMode ? ['--safe-mode'] : [])],
     cwd: ROOT,
     env,
   });
