@@ -21,6 +21,7 @@ import { SettingsStore, isPreferenceKey } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
 import { parseUiCommand } from './ui-command';
+import { RELEASES_API, checkDue, fetchUpdate, type UpdateInfo } from './update-check';
 import { trayKey, trayMenu, trayTooltip, type TrayAction, type TrayItem } from './tray-menu';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyClient } from './spotify/client';
@@ -224,7 +225,9 @@ function snapshot(): Snapshot {
       closeToTray: settings?.get().closeToTray ?? true,
       minimizeToTray: settings?.get().minimizeToTray ?? false,
       startMinimized: settings?.get().startMinimized ?? false,
+      checkForUpdates: settings?.get().checkForUpdates ?? true,
     },
+    update: update && settings?.get().checkForUpdates ? { version: update.version } : null,
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
@@ -252,7 +255,28 @@ function setStatus(text: string): void {
 
 /** Tells the Now Playing controller whether the window can be seen (it polls other devices only then). */
 function updateUiVisibility(): void {
-  nowPlaying.setVisible(uiWindow !== null && !uiWindow.isDestroyed() && uiWindow.isVisible() && !uiWindow.isMinimized());
+  const visible = uiWindow !== null && !uiWindow.isDestroyed() && uiWindow.isVisible() && !uiWindow.isMinimized();
+  nowPlaying.setVisible(visible);
+  if (visible) void maybeCheckForUpdate();
+}
+
+/** A newer release, once the daily check found one. */
+let update: UpdateInfo | null = null;
+
+/** The daily update check (#80): only while the window is open, and only if it is on. Test mode asks the fake server. */
+async function maybeCheckForUpdate(): Promise<void> {
+  const store = settings;
+  if (!store || !checkDue(store.get().checkForUpdates, store.get().lastUpdateCheck, Date.now())) return;
+  // Recorded before asking, so a failing check waits a day instead of retrying every time the window opens.
+  store.update({ lastUpdateCheck: Date.now() });
+  const api = e2e ? `${e2e.apiBase}${new URL(RELEASES_API).pathname}` : RELEASES_API;
+  try {
+    update = await fetchUpdate((input, init) => fetch(input, init), api, app.getVersion());
+    if (update) log.info('A newer Playlish is available', { code: 'UPDATE_AVAILABLE', context: { version: update.version } });
+    pushSnapshot();
+  } catch (err) {
+    log.warn('Update check failed', { code: 'UPDATE_CHECK_FAILED', error: err });
+  }
 }
 
 /** Set while Playlish itself closes the window to the tray (minimize to tray), so that close never quits the app. */
@@ -713,6 +737,10 @@ function registerIpc(): void {
     log.info(safe ? 'Restarting in safe mode' : 'Restarting normally', { code: 'RESTART' });
     app.relaunch({ args: relaunchArgs(process.argv, safe) });
     app.quit();
+  });
+  ipcMain.on('ui:open-update', () => {
+    // The address was checked when the release was read: only this project's release pages.
+    if (update) void openInBrowser(update.url);
   });
   ipcMain.on('ui:set-preference', (_event, key: unknown, value: unknown) => {
     if (!isPreferenceKey(key) || typeof value !== 'boolean') return;

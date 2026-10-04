@@ -249,7 +249,9 @@ export interface Snapshot {
   /** Installed plugins; always empty until the plugin system (0.3.0). */
   plugins: { id: string; name: string; version: string; enabled: boolean }[];
   /** The tray and start-up options on the Settings page. */
-  preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean };
+  preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean; checkForUpdates: boolean };
+  /** A newer release, when the update check found one (#80). */
+  update: { version: string } | null;
   metrics: MetricsSample | null;
   perfLogPath: string;
   /** Set after a crash the user has not been asked about yet. */
@@ -293,7 +295,9 @@ export interface UiApi {
   /** Restarts Playlish with all plugins off (true) or normally (false). */
   restart(safeMode: boolean): void;
   /** Turns a tray or start-up option on or off. */
-  setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized', value: boolean): void;
+  setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized' | 'checkForUpdates', value: boolean): void;
+  /** Opens the release page of the update in the browser. */
+  openUpdate(): void;
   /** One page of a library list (fetched on demand; nothing is kept in the main process beyond the API cache). */
   library(list: LibraryList, offset: number): Promise<LibraryResult>;
   /** Plays, queues, saves or removes library items. */

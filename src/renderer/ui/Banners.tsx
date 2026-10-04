@@ -9,6 +9,14 @@ export function Banners({ snapshot }: { snapshot: Snapshot }) {
           {snapshot.configError}
         </div>
       )}
+      {snapshot.update && (
+        <div id="updateBanner" class="banner" role="status">
+          <span>Playlish {snapshot.update.version} is available.</span>
+          <button class="primary" id="openUpdate" onClick={() => window.ui.openUpdate()}>
+            Download
+          </button>
+        </div>
+      )}
       {snapshot.needsRelogin && (
         <div id="reloginBanner" class="banner" role="alert">
           <span>Playlish needs a few new Spotify permissions. Log in again once to grant them; playback keeps working meanwhile.</span>
