@@ -73,6 +73,8 @@ export interface LaunchOptions {
   trayOnly?: boolean;
   /** Start with all plugins off (--safe-mode). */
   safeMode?: boolean;
+  /** A fake Equalizer APO config folder (#91); without it Equalizer APO counts as not installed. */
+  eqDir?: string;
   /** Set false when the app is expected to start without a window (for example "start in the tray"). */
   expectWindow?: boolean;
 }
@@ -91,6 +93,7 @@ export async function launch(options: LaunchOptions): Promise<Launched> {
     PLAYLISH_E2E_API: options.fake.baseUrl,
     PLAYLISH_E2E_PORT: String(await freePort()),
     PLAYLISH_E2E_SDK_STUB: SDK_STUB,
+    ...(options.eqDir ? { PLAYLISH_E2E_EQ_DIR: options.eqDir } : {}),
     ...(options.clientId ? { PLAYLISH_CLIENT_ID: options.clientId } : {}),
   });
   const app = await electron.launch({

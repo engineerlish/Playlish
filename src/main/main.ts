@@ -743,6 +743,8 @@ function registerIpc(): void {
   ipcMain.on('host:ready', (_event, id: string) => {
     deviceId = id;
     restoreVolume();
+    // With "System default", the EQ's device line needs the player to read the default device's name.
+    if (settings?.get().eq.enabled && settings.get().outputDevice === null) void equalizer.apply();
     setStatus('Player ready.');
     resolvePlayerWaiters({ ok: true });
     if (AUTOPLAY_TEST_TRACK && !startedPlayback && !setup) {
@@ -995,6 +997,8 @@ async function main(): Promise<void> {
   );
 
   registerIpc();
+  // Tells the Settings page whether Equalizer APO is there, and refreshes Playlish's EQ file (#91).
+  void equalizer.apply();
   createTray();
   // Milestone read by the performance harness (tools/perf): time from process start to the tray icon.
   log.info('Tray ready', { code: 'STARTUP_TRAY', context: { msSinceStart: Math.round(performance.now()) } });

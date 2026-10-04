@@ -253,6 +253,7 @@ async function playbackChecks(): Promise<void> {
 
   await checkMediaOverlay();
   await checkOutputDevice();
+  await checkEqualizer();
   await checkTransfer();
 
   // The login must survive a restart (a bug once deleted the stored session on every start).
@@ -353,6 +354,48 @@ async function checkOutputDevice(): Promise<void> {
 }
 
 /**
+ * Equalizer APO preset switching (#91): a strong cut (-12 dB on every band) must lower the measured level clearly; then
+ * the user's own equalizer settings are restored exactly. Needs Equalizer APO and, if its folder is protected, the
+ * one-time permission from Settings first.
+ */
+async function checkEqualizer(): Promise<void> {
+  const name = 'Equalizer APO preset switching';
+  type Eq = { status: string; enabled: boolean; preset: string; custom: number[]; error: string | null };
+  const readEq = async () =>
+    (await evaluate(DEVTOOLS_PORT, '/ui.html', `new Promise((resolve) => { window.ui.onSnapshot((s) => resolve(s.eq)); window.ui.requestSnapshot(); })`)) as Eq;
+  const before = await readEq();
+  if (before.status === 'not-installed') {
+    record({ id: 'eq', name, status: 'skipped', details: 'Equalizer APO is not installed.', area: 'audio', severity: 'low' });
+    return;
+  }
+  const setEq = (change: Partial<Eq>) => evaluate(DEVTOOLS_PORT, '/ui.html', `window.ui.setEq(${JSON.stringify(change)}), true`);
+  await setEq({ enabled: true, preset: 'flat' });
+  await sleep(2500);
+  const afterOn = await readEq();
+  if (afterOn.status === 'needs-setup') {
+    await setEq({ enabled: before.enabled, preset: before.preset, custom: before.custom });
+    record({ id: 'eq', name, status: 'skipped', details: 'Allow Playlish to change its equalizer file first (Settings → Audio → Equalizer → Allow).', area: 'audio', severity: 'low' });
+    return;
+  }
+  const flat = bestOf(2, 2000);
+  await setEq({ preset: 'custom', custom: Array(10).fill(-12) });
+  await sleep(2500);
+  const cut = bestOf(2, 2000);
+  await setEq({ enabled: before.enabled, preset: before.preset, custom: before.custom });
+  await sleep(1500);
+  const restored = await readEq();
+  const same = restored.enabled === before.enabled && restored.preset === before.preset && restored.custom.join() === before.custom.join();
+  record({
+    id: 'eq',
+    name,
+    status: flat > SOUND && cut < flat * 0.5 && same ? 'pass' : 'fail',
+    details: `flat: peak ${flat}; all bands -12 dB: peak ${cut}; your settings restored: ${same ? 'yes' : 'NO'}${afterOn.error ? `; error: ${afterOn.error}` : ''}`,
+    area: 'audio',
+    severity: 'medium',
+  });
+}
+
+/**
  * Moves playback to another Spotify device and back (#44): this computer must go silent, then play again. Needs a
  * second device that is online (a phone or speaker with Spotify open); without one the step is skipped.
  */
@@ -399,15 +442,6 @@ async function checkTransfer(): Promise<void> {
     area: 'player',
     severity: 'medium',
   });
-}
-
-/** Steps for features that do not exist yet; they become real checks as the MVP lands. */
-function notYetAvailable(): void {
-  for (const [id, name, area] of [
-    ['eq', 'Equalizer APO preset switching', 'audio'],
-  ] as const) {
-    record({ id, name, status: 'not-available', details: 'feature not built yet', area, severity: 'low' });
-  }
 }
 
 // Playlish plays nothing on its own since #43; the smoke test needs sound without anyone picking music, so it asks for
@@ -501,7 +535,6 @@ try {
 } catch (err) {
   record({ id: 'harness', name: 'Smoke test ran to the end', status: 'fail', details: (err as Error).message, area: 'ui', severity: 'medium' });
 } finally {
-  notYetAvailable();
   if (!(await ask('\nLeave Playlish running?'))) stopApp();
 }
 const report = writeReport(started);
