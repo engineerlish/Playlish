@@ -14,7 +14,7 @@
 
 Finding: my proposal estimated 60-90 MB idle. The stock build was 138 MB, mostly a ~60 MB GPU process. Disabling hardware acceleration and running the GPU code in the main process brought idle to **75 MB private**, inside the budget. The adopted flags are in `src/main/main.ts` (marked CHANGE HERE).
 
-## Not measured yet (needs your Client ID and a signed Electron, see README-SPIKE.md)
+## Not measured yet (needs your Client ID and a signed Electron, see DEVELOPMENT.md)
 
 - Does a VMP-signed castLabs build play a full track without license errors (the main risk).
 - RAM/CPU while playing with the window hidden, and with the window open.
