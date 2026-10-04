@@ -22,6 +22,9 @@ export interface FakeResponse {
   dropConnection?: boolean;
 }
 
+/** A canned response, or a function that builds one from the request (for answers that echo the request, like logins). */
+export type FakeHandler = FakeResponse | ((request: RecordedRequest) => FakeResponse);
+
 /**
  * A tiny local stand-in for Spotify's Web API and accounts service. Tests script it per route, point the code under
  * test at `baseUrl`, and then inspect `requests`. It never talks to the real Spotify, and it binds to 127.0.0.1 only.
@@ -31,7 +34,7 @@ export interface FakeResponse {
  */
 export class FakeSpotify {
   readonly requests: RecordedRequest[] = [];
-  private readonly routes = new Map<string, FakeResponse[]>();
+  private readonly routes = new Map<string, FakeHandler[]>();
   private readonly server: http.Server;
 
   private constructor() {
@@ -51,7 +54,7 @@ export class FakeSpotify {
   }
 
   /** Scripts the responses for a method and path (path without the query string). */
-  on(method: string, path: string, ...responses: FakeResponse[]): this {
+  on(method: string, path: string, ...responses: FakeHandler[]): this {
     if (responses.length === 0) throw new Error('on() needs at least one response');
     this.routes.set(`${method.toUpperCase()} ${path}`, [...responses]);
     return this;
@@ -72,18 +75,20 @@ export class FakeSpotify {
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', this.baseUrl);
     const method = (req.method ?? 'GET').toUpperCase();
-    this.requests.push({
+    const recorded: RecordedRequest = {
       method,
       path: url.pathname,
       query: url.searchParams,
       headers: req.headers,
       body: await readBody(req),
-    });
+    };
+    this.requests.push(recorded);
 
     const scripted = this.routes.get(`${method} ${url.pathname}`);
-    const response: FakeResponse = scripted
+    const handler: FakeHandler = scripted
       ? (scripted.length > 1 ? scripted.shift() : scripted[0]) ?? { status: 500 }
       : { status: 404, body: { error: { status: 404, message: 'Not found (unscripted route)' } } };
+    const response = typeof handler === 'function' ? handler(recorded) : handler;
 
     if (response.dropConnection) {
       req.socket.destroy();

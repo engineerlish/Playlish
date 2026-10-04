@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "e2e": "npm run build && playwright test",
     "audit:deps": "npm audit --audit-level=high",
     "check": "npm run typecheck && npm run lint && npm test",
     "perf:idle": "npm run build && node tools/perf/run.ts --scenario idle",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.3",
     "@vitest/coverage-v8": "^5.0.3",
     "electron": "github:castlabs/electron-releases#v44.1.0+wvcus",

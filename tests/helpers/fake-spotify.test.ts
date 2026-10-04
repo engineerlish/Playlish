@@ -38,6 +38,12 @@ describe('FakeSpotify test helper', () => {
     expect(request?.body).toEqual({ uris: ['spotify:track:1'] });
   });
 
+  it('can build a response from the request', async () => {
+    fake.on('GET', '/echo', (request) => ({ status: 200, body: { state: request.query.get('state') } }));
+
+    expect(await (await fetch(`${fake.baseUrl}/echo?state=xyz`)).json()).toEqual({ state: 'xyz' });
+  });
+
   it('answers unscripted routes with a Spotify-shaped 404', async () => {
     const res = await fetch(`${fake.baseUrl}/v1/nothing`);
 
