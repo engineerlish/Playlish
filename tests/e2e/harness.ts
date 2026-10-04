@@ -92,8 +92,16 @@ export async function launch(options: LaunchOptions): Promise<Launched> {
     cwd: ROOT,
     env,
   });
-  const ui = options.trayOnly ? (undefined as unknown as Page) : await uiWindow(app);
-  return { app, ui, userDataDir };
+  try {
+    const ui = options.trayOnly ? (undefined as unknown as Page) : await uiWindow(app);
+    return { app, ui, userDataDir };
+  } catch (err) {
+    // The test never gets this app, so nothing else would close it: a leaked instance once kept running for hours
+    // and made later tests fail at launch.
+    await app.close().catch(() => undefined);
+    if (!options.userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    throw err;
+  }
 }
 
 /** The main window: an open one, or the next one to open. The hidden playback host is never returned. */
