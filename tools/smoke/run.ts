@@ -324,24 +324,37 @@ async function checkTransfer(): Promise<void> {
     '/ui.html',
     `[...document.querySelectorAll('.device-row')].map((b) => ({ id: b.id, disabled: b.disabled, name: b.querySelector('.device-name')?.textContent ?? '' }))`,
   )) as { id: string; disabled: boolean; name: string }[] | null;
-  const other = (rows ?? []).find((r) => r.id !== 'device-this' && !r.disabled);
+  const candidates = (rows ?? []).filter((r) => r.id !== 'device-this' && !r.disabled);
+  // A device named like this computer (for example the Spotify app here) plays through the same speakers, so the audio
+  // meter cannot tell where the music is. Prefer another machine; on this one, check what Playlish shows instead.
+  const thisPc = os.hostname().toLowerCase();
+  const samePc = (r: { name: string }) => r.name.trim().toLowerCase() === thisPc;
+  const other = candidates.find((r) => !samePc(r)) ?? candidates[0];
   if (!other) {
     record({ id: 'transfer', name, status: 'skipped', details: 'No other Spotify device is online. Open Spotify on your phone to include this check.', area: 'player', severity: 'low' });
     return;
   }
+  const local = samePc(other);
+  const deviceLabel = () => evaluate(DEVTOOLS_PORT, '/ui.html', `document.getElementById('device')?.textContent ?? ''`) as Promise<string>;
   await click(DEVTOOLS_PORT, other.id);
   await sleep(4000);
   const away = meter(1500);
+  const shownAway = await deviceLabel();
   await click(DEVTOOLS_PORT, 'devicePicker');
   await sleep(2500);
   await click(DEVTOOLS_PORT, 'pick-this');
   await sleep(4000);
   const backHere = bestOf(2, 2000);
+  const shownBack = await deviceLabel();
+  const movedAway = local ? shownAway.includes(other.name) : away < SILENCE;
+  const movedBack = backHere > SOUND && shownBack === '';
   record({
     id: 'transfer',
     name,
-    status: away < SILENCE && backHere > SOUND ? 'pass' : 'fail',
-    details: `moved to "${other.name}": peak here ${away}; moved back: peak ${backHere}`,
+    status: movedAway && movedBack ? 'pass' : 'fail',
+    details: local
+      ? `moved to "${other.name}" on this computer (same speakers, so checked what Playlish shows): "${shownAway || 'nothing'}"; moved back: peak ${backHere}`
+      : `moved to "${other.name}": peak here ${away}; moved back: peak ${backHere}`,
     area: 'player',
     severity: 'medium',
   });
