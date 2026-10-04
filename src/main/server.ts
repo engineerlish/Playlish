@@ -10,6 +10,7 @@ const STATIC_FILES: Record<string, string> = {
   '/stall.js': 'text/javascript; charset=utf-8',
   '/ui.html': 'text/html; charset=utf-8',
   '/ui.js': 'text/javascript; charset=utf-8',
+  '/ui.css': 'text/css; charset=utf-8',
 };
 
 export interface ServerOptions {

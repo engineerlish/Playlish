@@ -10,8 +10,9 @@ import * as path from 'node:path';
 
 export const SETTINGS_VERSION = 1;
 
-export const PAGES = ['library', 'search', 'queue', 'devices', 'settings', 'plugins'] as const;
-export type Page = (typeof PAGES)[number];
+import { PAGES, isPage, type Page } from '../shared/pages';
+
+export { PAGES, type Page };
 
 export interface WindowState {
   width: number;
@@ -117,7 +118,7 @@ export function validateSettings(input: unknown): { settings: Settings; problems
     } else bad('window');
   }
   if (raw['lastPage'] !== undefined) {
-    if (typeof raw['lastPage'] === 'string' && (PAGES as readonly string[]).includes(raw['lastPage'])) settings.lastPage = raw['lastPage'] as Page;
+    if (isPage(raw['lastPage'])) settings.lastPage = raw['lastPage'];
     else bad('lastPage');
   }
   if (raw['deviceVolumes'] !== undefined) {

@@ -1,11 +1,11 @@
-// Copies the static renderer HTML next to the compiled JS and generates the tray icon (no binary assets in the repo).
+// Copies the static renderer HTML and CSS next to the compiled JS and generates the tray icon (no binary assets in the repo).
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 
 mkdirSync('dist/web/renderer', { recursive: true });
 mkdirSync('dist/assets', { recursive: true });
 
-for (const file of ['host.html', 'ui.html']) {
+for (const file of ['host.html', 'ui.html', 'ui.css']) {
   copyFileSync(`src/renderer/${file}`, `dist/web/renderer/${file}`);
 }
 

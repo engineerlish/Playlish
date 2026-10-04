@@ -3,6 +3,8 @@
  * This file must contain types only (no runtime code) so every build target can import it with `import type`.
  */
 
+import type { Page } from './pages';
+
 /** Commands the playback host (hidden SDK window) can execute directly. */
 export type PlayerCommand =
   | { type: 'toggle' }
@@ -95,6 +97,13 @@ export interface Snapshot {
   crashNotice: { when: string; process: string; kind: string } | null;
   /** The first-run wizard, while setup is not finished; null otherwise. */
   setup: SetupView | null;
+  /** The current login lacks permissions Playlish needs; the user should log in again. */
+  needsRelogin: boolean;
+  /** The page to open when the window opens. */
+  lastPage: Page;
+  /** The last four characters of the Client ID, for display, or null before setup. */
+  clientIdHint: string | null;
+  appVersion: string;
 }
 
 /** API exposed to the playback host page by its preload script. */
@@ -116,6 +125,8 @@ export interface UiApi {
   command(command: UiCommand): void;
   onSnapshot(callback: (snapshot: Snapshot) => void): void;
   requestSnapshot(): void;
+  /** Remembers the page the user is on. */
+  navigate(page: Page): void;
   /** Sends an action to the first-run wizard. */
   setup(action: SetupAction): void;
   /** Signs out: deletes the stored session and stops the player. */
