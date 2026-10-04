@@ -60,8 +60,9 @@ Checks to run before opening a pull request:
 | `npm run test:coverage` | Same, with a coverage report in `coverage/` |
 | `npm run audit:deps` | Dependency vulnerability check |
 | `npm run check` | Typecheck, lint and tests together |
+| `npm run e2e` | Builds, then runs the end-to-end suite (Playwright driving the real app) |
 
-Tests live in `tests/`. Spotify is never called from tests: use the fake server in `tests/helpers/fake-spotify.ts`. Add a line to `CHANGELOG.md` under "Unreleased" for every user-visible change.
+Tests live in `tests/`. Spotify is never called from tests: use the fake server in `tests/helpers/fake-spotify.ts`. End-to-end tests live in `tests/e2e/`: they start the built app in test mode (`PLAYLISH_E2E=1`, unpackaged builds only, loopback addresses only) against the fake server, with a stub of the Web Playback SDK (`tests/e2e/fixtures/spotify-player.js`), so they need no Spotify account, no Premium and no Widevine. When one fails, its screenshot, app log and Playwright trace are in `e2e-results/` (and in the CI artifacts). Add a line to `CHANGELOG.md` under "Unreleased" for every user-visible change.
 
 Playback needs a Spotify Premium account, your own Client ID from the Spotify Developer Dashboard, and a VMP-signed castLabs Electron build. See `README-SPIKE.md` for the current setup steps.
 

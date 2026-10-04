@@ -87,6 +87,49 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  e2e:
+    name: End-to-end tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Install scripts run here: the suite drives the real Electron binary. No browsers are downloaded, and the app
+      # talks only to the fake Spotify on 127.0.0.1 (end-to-end test mode, see src/main/e2e.ts).
+      - name: Install dependencies (with the Electron binary)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: End-to-end tests
+        run: npx playwright test
+
+      # Flaky tests (passed only on the retry) are listed here instead of disappearing into a green run.
+      - name: Write summary
+        if: always()
+        shell: bash
+        run: node scripts/e2e-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      # Screenshots, app logs and Playwright traces of failed tests (open a trace with npx playwright show-trace).
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failures
+          path: |
+            e2e-results/
+            e2e-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
   perf:
     name: Performance budgets
     runs-on: windows-latest

@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, shell } from 'electron';
+import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isPage } from '../shared/pages';
@@ -6,6 +6,7 @@ import type { PlaybackState, PlayerCommand, SetupAction, Snapshot, UiCommand } f
 import { appInfo, initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
 import { DEFAULT_PORT, DEFAULT_TRACK_URI, importLegacyConfig, redirectUriFor, resolveClientId } from './config';
+import { SDK_URL, readE2eConfig, type E2eConfig } from './e2e';
 import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
@@ -47,10 +48,14 @@ const playerLog = log.child('player');
 const uiLog = log.child('ui');
 installProcessHandlers(process, logging.crashes, () => app.exit(1));
 
+// End-to-end test mode (#9): unpackaged builds only, loopback addresses only; null in normal use. See e2e.ts.
+const e2e: E2eConfig | null = readE2eConfig(process.env, app.isPackaged);
+if (e2e) log.warn('End-to-end test mode: talking to a fake Spotify on this machine', { code: 'E2E_MODE' });
+
 let clientId: string | null = null;
 let setup: SetupController | null = null;
 let playerWaiters: ((result: PlayerCheck) => void)[] = [];
-const serverPort = DEFAULT_PORT;
+const serverPort = e2e?.port ?? DEFAULT_PORT;
 // CHANGE HERE: the spike still starts this test track when the player is ready; the Now Playing work (#43) replaces it.
 const TEST_TRACK_URI = DEFAULT_TRACK_URI;
 // CHANGE HERE: how long the wizard waits for the player to be accepted by Spotify.
@@ -119,7 +124,30 @@ function appLogTexts(): string[] {
 /** Opens a pre-filled issue in the browser, after checking the URL really points at the project. */
 function openIssue(url: string): void {
   if (!url.startsWith(`${NEW_ISSUE_URL}?`)) return;
-  void shell.openExternal(url);
+  void openInBrowser(url);
+}
+
+/**
+ * Opens a URL in the system browser. In end-to-end test mode nothing leaves the machine: the fake login page is fetched
+ * directly (following its redirect back to the loopback server, as a browser would) and anything else is only logged.
+ */
+async function openInBrowser(url: string): Promise<void> {
+  if (!e2e) return shell.openExternal(url);
+  if (url.startsWith(`${e2e.accountsBase}/`)) {
+    await fetch(url);
+    return;
+  }
+  log.info('End-to-end test mode: browser not opened', { code: 'E2E_OPEN_EXTERNAL', context: { host: new URL(url).host } });
+}
+
+/** Test mode only: serves the SDK stub to the playback host and answers every other https request with an error. */
+function installSdkStub(config: E2eConfig): void {
+  const stub = fs.readFileSync(config.sdkStubFile, 'utf8');
+  electronSession.fromPartition('persist:playback').protocol.handle('https', (request) =>
+    request.url === SDK_URL
+      ? new Response(stub, { headers: { 'Content-Type': 'text/javascript; charset=utf-8' } })
+      : new Response('No internet in end-to-end tests', { status: 503 }),
+  );
 }
 
 /** Lets the user save a redacted diagnostics bundle and shows it in Explorer. */
@@ -355,8 +383,9 @@ const sessions = new SessionHolder<Auth>({
         tokens?.clear();
         authLog.warn('Spotify rejected the stored session; it was deleted', { code: 'SESSION_EXPIRED' });
       },
+      ...(e2e ? { accountsBase: e2e.accountsBase } : {}),
     });
-    spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue });
+    spotify = new SpotifyClient({ getAccessToken: () => session.getAccessToken(), queue: apiQueue, ...(e2e ? { baseUrl: `${e2e.apiBase}/v1` } : {}) });
     return session;
   },
   forgetStoredSession: () => tokens?.clear(),
@@ -403,10 +432,10 @@ function startSetup(): void {
       settings?.flush();
       setupLog.info('Client ID saved', { code: 'SETUP_CLIENT_ID' });
     },
-    login: (id) => startSession(id).startLogin((url) => shell.openExternal(url)),
+    login: (id) => startSession(id).startLogin(openInBrowser),
     cancelLogin: () => auth?.cancelLogin(),
     checkPlayer,
-    openExternal: (url) => shell.openExternal(url),
+    openExternal: openInBrowser,
     copyText: (text) => {
       void clipboard.writeText(text);
     },
@@ -440,7 +469,7 @@ async function login(): Promise<void> {
   if (!auth) return;
   setStatus('Waiting for you to approve the login in your browser…');
   try {
-    await auth.startLogin((url) => shell.openExternal(url));
+    await auth.startLogin(openInBrowser);
     setStatus('Logged in. Starting player…');
     createHostWindow();
   } catch (err) {
@@ -618,11 +647,19 @@ async function main(): Promise<void> {
 
   // castLabs Electron downloads/validates the Widevine CDM asynchronously; the SDK can't start before it is ready.
   const widevineLog = log.child('widevine');
-  const cdmReady = components.whenReady().then(
-    () => widevineLog.info('Widevine CDM ready', { context: { status: components.status() } }),
-    (err: unknown) => widevineLog.error('Widevine CDM failed to load', { code: 'WIDEVINE_NOT_READY', error: err }),
-  );
+  // The SDK stub used in end-to-end tests needs no CDM, and test machines should not download one.
+  const cdmReady = e2e
+    ? Promise.resolve()
+    : components.whenReady().then(
+        () => widevineLog.info('Widevine CDM ready', { context: { status: components.status() } }),
+        (err: unknown) => widevineLog.error('Widevine CDM failed to load', { code: 'WIDEVINE_NOT_READY', error: err }),
+      );
   await app.whenReady();
+  if (e2e) {
+    installSdkStub(e2e);
+    // Lets the tests click the tray icon, which Playwright cannot reach.
+    (globalThis as Record<string, unknown>)['__playlishE2E'] = { clickTray: () => tray?.emit('click') };
+  }
   // Only the refresh token is stored, encrypted with safeStorage (DPAPI); see token-store.ts and #51.
   tokens = new TokenStore(app.getPath('userData'), safeStorage, (message) => authLog.warn(message, { code: 'TOKEN_STORE' }));
   const settingsLog = log.child('settings');
