@@ -1,4 +1,5 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -18,6 +19,8 @@ export const SDK_STUB = path.join(__dirname, 'fixtures', 'spotify-player.js');
 // CHANGE HERE: a made-up Client ID in the right format. It is never sent anywhere but the fake server.
 export const TEST_CLIENT_ID = '0123456789abcdef0123456789abcdef';
 export const REFRESH_TOKEN = 'e2e-refresh-token';
+// CHANGE HERE: how long closing a test app may take before it is killed.
+const CLOSE_TIMEOUT_MS = 15_000;
 
 /** A free TCP port on 127.0.0.1 for the app's loopback server. */
 export async function freePort(): Promise<number> {
@@ -180,7 +183,28 @@ export function logEntries(userDataDir: string, code: string): Record<string, un
 /** Closes the app if it is still running, and removes the profile unless asked to keep it. */
 export async function shutdown(launched: Launched | undefined, keepProfile = false): Promise<void> {
   if (!launched) return;
-  await launched.app.close().catch(() => undefined);
+  // An app that does not close in time is killed with all its processes, so one stuck app cannot run into Playwright's
+  // 60 s teardown limit and fail a run whose tests passed (seen on CI).
+  let pid: number | undefined;
+  try {
+    pid = launched.app.process().pid;
+  } catch {
+    // Closed by the test already.
+  }
+  const closed = await Promise.race([
+    launched.app.close().then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), CLOSE_TIMEOUT_MS)),
+  ]);
+  if (!closed && pid !== undefined) {
+    try {
+      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } catch {
+      // Already gone.
+    }
+  }
   if (!keepProfile) fs.rmSync(launched.userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
