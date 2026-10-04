@@ -11,6 +11,7 @@ import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
+import { DevicesController } from './devices';
 import { NowPlayingController } from './now-playing';
 import { resultPage, startServer } from './server';
 import { SessionHolder } from './session-holder';
@@ -209,6 +210,7 @@ function snapshot(): Snapshot {
     loggedIn: auth?.isLoggedIn() ?? false,
     deviceReady: deviceId !== null,
     playback: nowPlaying.view(),
+    devices: devices.view(),
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
@@ -434,6 +436,26 @@ const nowPlaying = new NowPlayingController({
   },
 });
 
+// Spotify Connect devices: loaded when the Devices page or the bar's picker asks, never on a timer (#44).
+const devices = new DevicesController({
+  api: () => spotify,
+  ownDeviceId: () => deviceId,
+  isPlaying: () => {
+    const now = nowPlaying.view();
+    return now !== null && !now.paused;
+  },
+  onChange: () => pushSnapshot(),
+  afterTransfer: () => void nowPlaying.refresh(),
+  onError: (err) => {
+    playerLog.warn('Device list or transfer failed', {
+      code: 'DEVICES_API',
+      error: err,
+      ...(err instanceof SpotifyApiError ? { context: { status: err.status, reason: err.reason } } : {}),
+    });
+    if (err instanceof SpotifyApiError) setStatus(describeApiError(err));
+  },
+});
+
 /** The login (and API client) for a Client ID; a new one only if the Client ID changed. */
 function startSession(id: string): Auth {
   auth = sessions.use(id);
@@ -503,6 +525,7 @@ function signOut(): void {
   deviceId = null;
   playback = null;
   nowPlaying.reset();
+  devices.reset();
   startedPlayback = false;
   authLog.info('Signed out', { code: 'SIGNED_OUT' });
   setStatus('Signed out.');
@@ -645,6 +668,10 @@ function registerIpc(): void {
     pushSnapshot();
   });
   ipcMain.on('ui:command', (_event, command: UiCommand) => void nowPlaying.command(command));
+  ipcMain.on('ui:devices-refresh', () => void devices.refresh());
+  ipcMain.on('ui:transfer', (_event, id: unknown) => {
+    if (typeof id === 'string') void devices.transfer(id);
+  });
 }
 
 /** Creates the tray icon with Open/Quit entries. The tray is how the user gets the UI back after closing it. */
@@ -791,6 +818,7 @@ async function main(): Promise<void> {
 
 app.on('before-quit', () => {
   nowPlaying.stop();
+  devices.stop();
   metrics?.stop();
   settings?.flush();
 });

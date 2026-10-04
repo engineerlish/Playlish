@@ -10,6 +10,8 @@ const api: UiApi = {
   },
   requestSnapshot: () => ipcRenderer.send('ui:request-snapshot'),
   navigate: (page) => ipcRenderer.send('ui:navigate', page),
+  refreshDevices: () => ipcRenderer.send('ui:devices-refresh'),
+  transfer: (deviceId) => ipcRenderer.send('ui:transfer', deviceId),
   setup: (action) => ipcRenderer.send('ui:setup', action),
   signOut: () => ipcRenderer.send('ui:sign-out'),
   exportDiagnostics: () => ipcRenderer.send('ui:export-diagnostics'),

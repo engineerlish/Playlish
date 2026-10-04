@@ -18,7 +18,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline/promises';
 import { buildIssue, type FailureReport } from '../issues/format.ts';
 import { fileFailure } from '../issues/github.ts';
-import { click, setRange } from './cdp.ts';
+import { click, evaluate, setRange } from './cdp.ts';
 
 type Status = 'pass' | 'fail' | 'skipped' | 'not-available';
 
@@ -251,6 +251,8 @@ async function playbackChecks(): Promise<void> {
   const back = bestOf(2, 2000);
   record({ id: 'fade', name: 'Fade pause and fade resume', status: faded < SILENCE && back > SOUND ? 'pass' : 'fail', details: `after fade-out ${faded}, after fade-in ${back}`, area: 'audio', severity: 'medium' });
 
+  await checkTransfer();
+
   // The login must survive a restart (a bug once deleted the stored session on every start).
   stopApp();
   await sleep(2000);
@@ -267,10 +269,45 @@ async function playbackChecks(): Promise<void> {
   });
 }
 
+/**
+ * Moves playback to another Spotify device and back (#44): this computer must go silent, then play again. Needs a
+ * second device that is online (a phone or speaker with Spotify open); without one the step is skipped.
+ */
+async function checkTransfer(): Promise<void> {
+  const name = 'Transfer playback to and from another device';
+  await click(DEVTOOLS_PORT, 'nav-devices');
+  await sleep(3000);
+  const rows = (await evaluate(
+    DEVTOOLS_PORT,
+    '/ui.html',
+    `[...document.querySelectorAll('.device-row')].map((b) => ({ id: b.id, disabled: b.disabled, name: b.querySelector('.device-name')?.textContent ?? '' }))`,
+  )) as { id: string; disabled: boolean; name: string }[] | null;
+  const other = (rows ?? []).find((r) => r.id !== 'device-this' && !r.disabled);
+  if (!other) {
+    record({ id: 'transfer', name, status: 'skipped', details: 'No other Spotify device is online. Open Spotify on your phone to include this check.', area: 'player', severity: 'low' });
+    return;
+  }
+  await click(DEVTOOLS_PORT, other.id);
+  await sleep(4000);
+  const away = meter(1500);
+  await click(DEVTOOLS_PORT, 'devicePicker');
+  await sleep(2500);
+  await click(DEVTOOLS_PORT, 'pick-this');
+  await sleep(4000);
+  const backHere = bestOf(2, 2000);
+  record({
+    id: 'transfer',
+    name,
+    status: away < SILENCE && backHere > SOUND ? 'pass' : 'fail',
+    details: `moved to "${other.name}": peak here ${away}; moved back: peak ${backHere}`,
+    area: 'player',
+    severity: 'medium',
+  });
+}
+
 /** Steps for features that do not exist yet; they become real checks as the MVP lands. */
 function notYetAvailable(): void {
   for (const [id, name, area] of [
-    ['transfer', 'Transfer playback to and from another device', 'player'],
     ['media-keys', 'Media keys and Windows media overlay', 'player'],
     ['output-device', 'Output device switching', 'audio'],
     ['eq', 'Equalizer APO preset switching', 'audio'],
