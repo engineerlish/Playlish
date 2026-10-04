@@ -1,16 +1,21 @@
-import type { HostApi, PlaybackState, PlayerCommand } from '../shared/types';
+import type { ArtImage, HostApi, PlaybackState, PlayerCommand, RepeatMode } from '../shared/types';
 import { FadeController, VolumeRamper } from './fade.js';
 import { StallDetector, StallRecovery } from './stall.js';
 
 /* Minimal typings for the parts of the Spotify Web Playback SDK used here (avoids an extra @types dependency). */
 interface SpotifyTrack {
   name: string;
+  uri?: string;
   artists: { name: string }[];
+  album?: { images?: { url: string; width?: number | null; height?: number | null }[] };
 }
 interface SpotifySdkState {
   paused: boolean;
   position: number;
   duration: number;
+  shuffle?: boolean;
+  /** 0 off, 1 repeat the context, 2 repeat the track. */
+  repeat_mode?: number;
   track_window: { current_track: SpotifyTrack };
 }
 interface SpotifyPlayer {
@@ -23,6 +28,7 @@ interface SpotifyPlayer {
   nextTrack(): Promise<void>;
   previousTrack(): Promise<void>;
   setVolume(volume: number): Promise<void>;
+  seek(positionMs: number): Promise<void>;
 }
 interface SpotifyNamespace {
   Player: new (options: {
@@ -51,6 +57,7 @@ let player: SpotifyPlayer;
 let ramper: VolumeRamper;
 let fader: FadeController;
 let baseVolume = INITIAL_VOLUME;
+let muted = false;
 const stallDetector = new StallDetector();
 const stallRecovery = new StallRecovery();
 let watchdogTimer: number | null = null;
@@ -61,10 +68,13 @@ function on<T>(event: string, callback: (payload: T) => void): void {
   player.addListener(event, callback);
 }
 
+const REPEAT_MODES: readonly RepeatMode[] = ['off', 'context', 'track'];
+
 /** Converts the SDK state into the reduced state sent to the main process. */
 function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
   if (!state) return null;
   const track = state.track_window.current_track;
+  const images: ArtImage[] = (track.album?.images ?? []).map((i) => ({ url: i.url, width: i.width ?? null, height: i.height ?? null }));
   return {
     paused: state.paused,
     positionMs: state.position,
@@ -73,6 +83,11 @@ function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
     artists: track.artists.map((a) => a.name).join(', '),
     volume: baseVolume,
     sampledAt: Date.now(),
+    trackUri: track.uri ?? null,
+    images,
+    shuffle: state.shuffle ?? false,
+    repeat: REPEAT_MODES[state.repeat_mode ?? 0] ?? 'off',
+    muted,
   };
 }
 
@@ -123,6 +138,7 @@ function handleCommand(command: PlayerCommand): void {
       void player.togglePlay();
       break;
     case 'fadeToggle':
+      muted = false; // a fade ends at the user's volume
       void fader.toggle();
       break;
     case 'next':
@@ -134,7 +150,17 @@ function handleCommand(command: PlayerCommand): void {
     case 'volume':
       ramper.cancel(); // the user's volume change wins over a running fade
       baseVolume = Math.min(1, Math.max(0, command.value));
+      muted = false; // moving the slider unmutes
       void player.setVolume(baseVolume).then(reportState);
+      break;
+    case 'seek':
+      void player.seek(Math.max(0, Math.floor(command.positionMs)));
+      break;
+    case 'mute':
+      ramper.cancel();
+      muted = command.muted;
+      // The remembered volume stays; unmuting goes back to it.
+      void player.setVolume(muted ? 0 : baseVolume).then(reportState);
       break;
   }
 }

@@ -11,6 +11,7 @@ import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
+import { NowPlayingController } from './now-playing';
 import { resultPage, startServer } from './server';
 import { SessionHolder } from './session-holder';
 import { SettingsStore } from './settings';
@@ -56,8 +57,10 @@ let clientId: string | null = null;
 let setup: SetupController | null = null;
 let playerWaiters: ((result: PlayerCheck) => void)[] = [];
 const serverPort = e2e?.port ?? DEFAULT_PORT;
-// CHANGE HERE: the spike still starts this test track when the player is ready; the Now Playing work (#43) replaces it.
+// The smoke test (tools/smoke) needs sound without anyone picking music, so it asks for this track to start by itself
+// with PLAYLISH_SMOKE_AUTOPLAY=1. Normal starts play nothing until the user presses Play.
 const TEST_TRACK_URI = DEFAULT_TRACK_URI;
+const AUTOPLAY_TEST_TRACK = process.env['PLAYLISH_SMOKE_AUTOPLAY'] === '1';
 // CHANGE HERE: how long the wizard waits for the player to be accepted by Spotify.
 const PLAYER_CHECK_TIMEOUT_MS = 45_000;
 let configError: string | null = null;
@@ -140,13 +143,20 @@ async function openInBrowser(url: string): Promise<void> {
   log.info('End-to-end test mode: browser not opened', { code: 'E2E_OPEN_EXTERNAL', context: { host: new URL(url).host } });
 }
 
-/** Test mode only: serves the SDK stub to the playback host and answers every other https request with an error. */
+/**
+ * Test mode only: serves the SDK stub to the playback host, and answers every other https request from either window
+ * (album art included) with an error, so a test run never reaches the internet.
+ */
 function installSdkStub(config: E2eConfig): void {
   const stub = fs.readFileSync(config.sdkStubFile, 'utf8');
+  const offline = () => new Response('No internet in end-to-end tests', { status: 503 });
+  // Album art gets a 1x1 placeholder, so tests can see which image the bar chose.
+  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
   electronSession.fromPartition('persist:playback').protocol.handle('https', (request) =>
-    request.url === SDK_URL
-      ? new Response(stub, { headers: { 'Content-Type': 'text/javascript; charset=utf-8' } })
-      : new Response('No internet in end-to-end tests', { status: 503 }),
+    request.url === SDK_URL ? new Response(stub, { headers: { 'Content-Type': 'text/javascript; charset=utf-8' } }) : offline(),
+  );
+  electronSession.defaultSession.protocol.handle('https', (request) =>
+    request.url.startsWith('https://i.scdn.co/') ? new Response(pixel, { headers: { 'Content-Type': 'image/png' } }) : offline(),
   );
 }
 
@@ -198,7 +208,7 @@ function snapshot(): Snapshot {
     configError,
     loggedIn: auth?.isLoggedIn() ?? false,
     deviceReady: deviceId !== null,
-    playback,
+    playback: nowPlaying.view(),
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
@@ -221,6 +231,11 @@ function setStatus(text: string): void {
   status = text;
   uiLog.info(`Status: ${text}`);
   pushSnapshot();
+}
+
+/** Tells the Now Playing controller whether the window can be seen (it polls other devices only then). */
+function updateUiVisibility(): void {
+  nowPlaying.setVisible(uiWindow !== null && !uiWindow.isDestroyed() && uiWindow.isVisible() && !uiWindow.isMinimized());
 }
 
 /** Closes the UI window (it is destroyed, not hidden). */
@@ -265,7 +280,13 @@ function openUi(): void {
   win.once('ready-to-show', () => {
     if (fitted?.maximized) win.maximize();
     win.show();
+    updateUiVisibility();
   });
+  // Other devices' playback is only polled while the window can be seen (#43).
+  win.on('show', updateUiVisibility);
+  win.on('hide', updateUiVisibility);
+  win.on('minimize', updateUiVisibility);
+  win.on('restore', updateUiVisibility);
   // Saves are debounced by the settings store, so dragging the window does not write on every pixel.
   const saveBounds = () => {
     if (win.isDestroyed() || win.isMinimized()) return;
@@ -279,6 +300,7 @@ function openUi(): void {
   win.on('close', saveBounds);
   uiWindow.on('closed', () => {
     uiWindow = null; // Destroyed: no renderer process remains while the app sits in the tray.
+    updateUiVisibility();
   });
   uiWindow.webContents.once('did-finish-load', () => {
     if (uiReadyLogged) return;
@@ -348,8 +370,7 @@ function createHostWindow(): void {
     if (hostWindow !== win) return;
     hostWindow = null;
     deviceId = null;
-    playback = null;
-    pushSnapshot();
+    onHostState(null);
   });
   void hostWindow.loadURL(`http://127.0.0.1:${serverPort}/host.html`);
 }
@@ -367,7 +388,7 @@ function restartHost(): void {
   hostWindow?.destroy();
   hostWindow = null;
   deviceId = null;
-  playback = null;
+  onHostState(null);
   startedPlayback = false;
   setStatus('Playback stalled. Restarting the player…');
   createHostWindow();
@@ -389,6 +410,28 @@ const sessions = new SessionHolder<Auth>({
     return session;
   },
   forgetStoredSession: () => tokens?.clear(),
+});
+
+// What the Now Playing bar shows: SDK events while playing here, the Web API (polled, window visible only) otherwise.
+const nowPlaying = new NowPlayingController({
+  api: () => spotify,
+  sendToHost: (command: PlayerCommand) => {
+    if (!hostWindow || hostWindow.isDestroyed()) return false;
+    hostWindow.webContents.send('host:command', command);
+    return true;
+  },
+  ownDeviceId: () => deviceId,
+  loggedIn: () => auth?.isLoggedIn() ?? false,
+  onChange: () => pushSnapshot(),
+  onError: (err) => {
+    playerLog.warn('Playback command or check failed', {
+      code: 'NOW_PLAYING_API',
+      error: err,
+      ...(err instanceof SpotifyApiError ? { context: { status: err.status, reason: err.reason } } : {}),
+    });
+    if (err instanceof SpotifyApiError) setStatus(describeApiError(err));
+    else if (err instanceof SessionExpiredError) setStatus(err.message);
+  },
 });
 
 /** The login (and API client) for a Client ID; a new one only if the Client ID changed. */
@@ -459,6 +502,7 @@ function signOut(): void {
   hostWindow = null;
   deviceId = null;
   playback = null;
+  nowPlaying.reset();
   startedPlayback = false;
   authLog.info('Signed out', { code: 'SIGNED_OUT' });
   setStatus('Signed out.');
@@ -506,7 +550,7 @@ function onHostState(state: PlaybackState | null): void {
     code: 'PLAYER_STATE',
   });
   playback = state;
-  pushSnapshot();
+  nowPlaying.setHere(state); // pushes the snapshot
 }
 
 /** Wires the IPC channels between main, the UI window and the playback host. */
@@ -535,10 +579,12 @@ function registerIpc(): void {
     deviceId = id;
     setStatus('Player ready.');
     resolvePlayerWaiters({ ok: true });
-    if (!startedPlayback && !setup) {
+    if (AUTOPLAY_TEST_TRACK && !startedPlayback && !setup) {
       startedPlayback = true;
       void playConfiguredTrack();
     }
+    // Now that this device exists, find out whether something already plays elsewhere.
+    void nowPlaying.refresh();
   });
   ipcMain.on('host:state', (_event, state: PlaybackState | null) => onHostState(state));
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
@@ -598,13 +644,7 @@ function registerIpc(): void {
     crashNotice = null;
     pushSnapshot();
   });
-  ipcMain.on('ui:command', (_event, command: UiCommand) => {
-    if (command.type === 'playTrack') {
-      void playConfiguredTrack();
-      return;
-    }
-    hostWindow?.webContents.send('host:command', command satisfies PlayerCommand);
-  });
+  ipcMain.on('ui:command', (_event, command: UiCommand) => void nowPlaying.command(command));
 }
 
 /** Creates the tray icon with Open/Quit entries. The tray is how the user gets the UI back after closing it. */
@@ -750,6 +790,7 @@ async function main(): Promise<void> {
 }
 
 app.on('before-quit', () => {
+  nowPlaying.stop();
   metrics?.stop();
   settings?.flush();
 });

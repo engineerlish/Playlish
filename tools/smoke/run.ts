@@ -188,7 +188,7 @@ async function playbackChecks(): Promise<void> {
   }
 
   const offset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
-  app = spawn(EXE, ['.', `--user-data-dir=${profile}`, `--remote-debugging-port=${DEVTOOLS_PORT}`], { cwd: ROOT, stdio: 'ignore' });
+  app = spawn(EXE, ['.', `--user-data-dir=${profile}`, `--remote-debugging-port=${DEVTOOLS_PORT}`], { cwd: ROOT, stdio: 'ignore', env: SMOKE_ENV });
 
   const first = await waitForLog(offset, /Status: (Restoring your session|Not logged in|Configuration needed)/, 30_000);
   if (!first || /Configuration needed/.test(first)) {
@@ -255,7 +255,7 @@ async function playbackChecks(): Promise<void> {
   stopApp();
   await sleep(2000);
   const restartOffset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
-  app = spawn(EXE, ['.', `--user-data-dir=${profile}`, `--remote-debugging-port=${DEVTOOLS_PORT}`], { cwd: ROOT, stdio: 'ignore' });
+  app = spawn(EXE, ['.', `--user-data-dir=${profile}`, `--remote-debugging-port=${DEVTOOLS_PORT}`], { cwd: ROOT, stdio: 'ignore', env: SMOKE_ENV });
   const afterRestart = await waitForLog(restartOffset, /Status: (Restoring your session|Not logged in|Welcome to Playlish)/, 30_000);
   record({
     id: 'restart',
@@ -278,6 +278,10 @@ function notYetAvailable(): void {
     record({ id, name, status: 'not-available', details: 'feature not built yet', area, severity: 'low' });
   }
 }
+
+// Playlish plays nothing on its own since #43; the smoke test needs sound without anyone picking music, so it asks for
+// the built-in test track to start when the player is ready.
+const SMOKE_ENV = { ...process.env, PLAYLISH_SMOKE_AUTOPLAY: '1' };
 
 /** Stops the app this script started (and every process it spawned). */
 function stopApp(): void {
