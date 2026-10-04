@@ -63,6 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Smoke test: moving playback to a Spotify device on the same computer (for example the Spotify app) no longer fails because the same speakers keep playing; it prefers another machine and otherwise checks what Playlish shows.
 - Media keys and the Windows media overlay: the overlay showed the track as paused while it played, and its buttons did nothing. Spotify's player now drives them itself from the frame that plays the audio.
 - Player commands from the window are checked in the main process; a malformed one (for example a seek to an invalid position) is ignored and logged instead of being sent to Spotify.
 - Removing a song from Liked Songs while scrolled down no longer jumps the list back to the top; the songs on screen reload in place.
