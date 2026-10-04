@@ -43,7 +43,8 @@ export const test = base.extend<Fixtures>({
         .catch(() => undefined);
       if (failed) {
         const page = run.app.windows().find((p) => p.url().endsWith('/ui.html'));
-        if (page) await testInfo.attach(`screenshot-${i}`, { body: await page.screenshot().catch(() => Buffer.alloc(0)), contentType: 'image/png' });
+        const shot = testInfo.outputPath(`screenshot-${i}.png`);
+        if (page && (await page.screenshot({ path: shot }).then(() => true, () => false))) await testInfo.attach(`screenshot-${i}`, { path: shot, contentType: 'image/png' });
         const log = path.join(run.userDataDir, 'logs', 'playlish.log');
         if (fs.existsSync(log)) await testInfo.attach(`playlish-${i}.log`, { path: log, contentType: 'text/plain' });
       }

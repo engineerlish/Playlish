@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "e2e": "npm run build && playwright test",
     "audit:deps": "npm audit --audit-level=high",
     "check": "npm run typecheck && npm run lint && npm test",
     "perf:idle": "npm run build && node tools/perf/run.ts --scenario idle",
