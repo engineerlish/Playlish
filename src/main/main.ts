@@ -1,5 +1,7 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell } from 'electron';
+import { execFile, execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { isPage } from '../shared/pages';
 import type { PlaybackState, PlayerCommand, SetupAction, Snapshot } from '../shared/types';
@@ -13,12 +15,14 @@ import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIss
 import { MetricsLogger } from './metrics';
 import { recallVolume, rememberVolume, volumeKey } from './device-volume';
 import { DevicesController } from './devices';
+import { REGISTRY_KEY, parseRegQuery } from './eq/apo';
+import { EqController } from './eq/controller';
 import { LibraryService } from './library';
 import { NowPlayingController } from './now-playing';
 import { resultPage, startServer } from './server';
 import { relaunchArgs, isSafeMode } from './safe-mode';
 import { SessionHolder } from './session-holder';
-import { SettingsStore, isPreferenceKey } from './settings';
+import { EQ_PRESETS, SettingsStore, isPreferenceKey, type EqPreset } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
 import { outputHookScript, type OutputHookResult } from './output-hook';
@@ -232,6 +236,7 @@ function snapshot(): Snapshot {
     },
     update: update && settings?.get().checkForUpdates ? { version: update.version } : null,
     output: settings?.get().outputDevice ?? null,
+    eq: equalizer.view(),
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
@@ -459,6 +464,8 @@ function setOutput(name: string | null): void {
   settings?.update({ outputDevice: name });
   applyOutputDevice();
   restoreVolume();
+  // The EQ follows the output device.
+  if (settings?.get().eq.enabled) void equalizer.apply();
   pushSnapshot();
 }
 
@@ -546,6 +553,42 @@ const devices = new DevicesController({
     });
     if (err instanceof SpotifyApiError) setStatus(describeApiError(err));
   },
+});
+
+// CHANGE HERE: Equalizer APO's download page, opened from Settings when it is not installed.
+const EQ_APO_DOWNLOAD = 'https://sourceforge.net/projects/equalizerapo/';
+
+/** Equalizer APO's config folder from the registry (or the fake one in test mode), or null when it is not installed. */
+function eqConfigPath(): string | null {
+  if (e2e) return e2e.eqConfigDir;
+  try {
+    return parseRegQuery(execFileSync('reg', ['query', REGISTRY_KEY, '/v', 'ConfigPath'], { encoding: 'utf8', windowsHide: true }));
+  } catch {
+    return null;
+  }
+}
+
+// The Equalizer APO integration (#91).
+const equalizer = new EqController({
+  apo: { configPath: eqConfigPath, fs },
+  settings: () => settings?.get() ?? { eq: { enabled: false, preset: 'flat', custom: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, outputDevice: null },
+  defaultOutputName: async () => {
+    if (!hostWindow || hostWindow.isDestroyed()) return null;
+    const label = (await hostWindow.webContents.mainFrame
+      .executeJavaScript(`navigator.mediaDevices.enumerateDevices().then((d) => (d.find((x) => x.kind === 'audiooutput' && x.deviceId === 'default') || {}).label || null)`)
+      .catch(() => null)) as string | null;
+    return label ? label.replace(/^Default - /, '') : null;
+  },
+  runElevated: (script) =>
+    new Promise((resolve) => {
+      // The script goes base64-encoded (UTF-16LE, as -EncodedCommand expects), so no quoting can break it.
+      const encoded = Buffer.from(script, 'utf16le').toString('base64');
+      const command = `Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','${encoded}'`;
+      execFile('powershell', ['-NoProfile', '-Command', command], { windowsHide: true }, (err) => resolve(!err));
+    }),
+  windowsUser: () => `${process.env['USERDOMAIN'] ?? os.hostname()}\\${os.userInfo().username}`,
+  onChange: () => pushSnapshot(),
+  warn: (message, error) => log.child('eq').warn(message, { code: 'EQ_APPLY_FAILED', error }),
 });
 
 // Library pages: one page per request, checked before it reaches the Web API (#47).
@@ -799,6 +842,20 @@ function registerIpc(): void {
     if (name !== null && (typeof name !== 'string' || name.length === 0 || name.length > MAX_OUTPUT_NAME)) return;
     setOutput(name);
   });
+  ipcMain.on('ui:set-eq', (_event, change: unknown) => {
+    if (!settings || typeof change !== 'object' || change === null) return;
+    const c = change as Record<string, unknown>;
+    const next = { ...settings.get().eq };
+    if (typeof c['enabled'] === 'boolean') next.enabled = c['enabled'];
+    if (typeof c['preset'] === 'string' && (EQ_PRESETS as readonly string[]).includes(c['preset'])) next.preset = c['preset'] as EqPreset;
+    if (Array.isArray(c['custom']) && c['custom'].length === 10 && c['custom'].every((g) => typeof g === 'number' && Number.isFinite(g))) {
+      next.custom = (c['custom'] as number[]).map((g) => Math.min(12, Math.max(-12, g)));
+    }
+    settings.update({ eq: next });
+    void equalizer.apply();
+  });
+  ipcMain.on('ui:setup-eq', () => void equalizer.setup());
+  ipcMain.on('ui:open-eq-download', () => void openInBrowser(EQ_APO_DOWNLOAD));
   ipcMain.on('ui:open-update', () => {
     // The address was checked when the release was read: only this project's release pages.
     if (update) void openInBrowser(update.url);

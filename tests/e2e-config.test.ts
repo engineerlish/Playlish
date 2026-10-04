@@ -22,6 +22,7 @@ describe('readE2eConfig', () => {
       apiBase: 'http://127.0.0.1:5001',
       port: 43900,
       sdkStubFile: 'C:\\stub\\spotify-player.js',
+      eqConfigDir: null,
     });
   });
 

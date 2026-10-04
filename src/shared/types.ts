@@ -108,6 +108,21 @@ export interface DevicesView {
   error: string | null;
 }
 
+/* ----- equalizer (#91) ----- */
+
+export type EqPresetId = 'flat' | 'bassBoost' | 'bassCut' | 'vocal' | 'trebleBoost' | 'custom';
+
+export interface EqView {
+  /** 'not-installed': Equalizer APO is missing; 'needs-setup': one Windows prompt is needed to let Playlish write; 'ready'. */
+  status: 'not-installed' | 'needs-setup' | 'ready';
+  enabled: boolean;
+  preset: EqPresetId;
+  /** The custom 10-band gains (dB), 31 Hz to 16 kHz. */
+  custom: number[];
+  /** The last problem applying it, in plain words, or null. */
+  error: string | null;
+}
+
 /* ----- library (#47) ----- */
 
 /** A list the Library page can show, loaded page by page. */
@@ -252,6 +267,7 @@ export interface Snapshot {
   preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean; checkForUpdates: boolean };
   /** Name of the chosen output device (#89), or null for the system default. */
   output: string | null;
+  eq: EqView;
   /** A newer release, when the update check found one (#80). */
   update: { version: string } | null;
   metrics: MetricsSample | null;
@@ -304,6 +320,12 @@ export interface UiApi {
   openUpdate(): void;
   /** Plays on the output device with this name, or the system default (null). */
   setOutput(name: string | null): void;
+  /** Changes the equalizer (any of: on/off, preset, custom gains). */
+  setEq(change: { enabled?: boolean; preset?: EqPresetId; custom?: number[] }): void;
+  /** Runs the one-time Windows prompt that lets Playlish write its equalizer file. */
+  setupEq(): void;
+  /** Opens Equalizer APO's download page. */
+  openEqDownload(): void;
   /** One page of a library list (fetched on demand; nothing is kept in the main process beyond the API cache). */
   library(list: LibraryList, offset: number): Promise<LibraryResult>;
   /** Plays, queues, saves or removes library items. */
