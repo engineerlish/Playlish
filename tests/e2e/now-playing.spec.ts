@@ -121,16 +121,14 @@ test.describe('Now Playing on this device', () => {
     await expect.poll(() => fake.requestsFor('PUT', '/v1/me/player/repeat').at(-1)?.query.get('state')).toBe('off');
   });
 
-  test('the Windows media overlay gets the track, art and play state', async ({ start }) => {
+  test('media keys and the Windows overlay are left to the SDK, which plays the audio', async ({ start }) => {
     const { app } = await playingHere(start);
-    const overlay = () =>
-      inHost<{ title: string; artist: string; art: string[]; state: string }>(
-        app,
-        `({ title: navigator.mediaSession.metadata?.title, artist: navigator.mediaSession.metadata?.artist,
-            art: [...(navigator.mediaSession.metadata?.artwork ?? [])].map((a) => a.sizes), state: navigator.mediaSession.playbackState })`,
-      );
 
-    await expect.poll(overlay).toEqual({ title: 'E2E Song One', artist: 'E2E Artist', art: ['64x64', '300x300', '640x640'], state: 'playing' });
+    // The SDK plays inside its own iframe; only that frame can report the real play state to Windows (#45, smoke test).
+    const calls = await inHost<{ method: string; args: { enableMediaSession?: boolean }[] }[]>(app, 'window.__stub.calls');
+    expect(calls.find((c) => c.method === 'constructor')?.args[0]?.enableMediaSession).toBe(true);
+    // And this page sets no Media Session of its own, which would compete with the SDK's.
+    expect(await inHost(app, 'navigator.mediaSession.metadata')).toBeNull();
   });
 
   test('no Web API polling while playing here', async ({ start, fake }) => {

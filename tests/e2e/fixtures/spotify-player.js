@@ -68,7 +68,7 @@
   class Player {
     constructor(options) {
       this.options = options;
-      record('constructor', [{ name: options.name, volume: options.volume }]);
+      record('constructor', [{ name: options.name, volume: options.volume, enableMediaSession: options.enableMediaSession }]);
       if (typeof options.volume === 'number') volume = options.volume;
     }
     addListener(event, callback) {

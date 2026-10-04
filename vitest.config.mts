@@ -24,7 +24,7 @@ export default defineConfig({
         lines: 65,
         'src/main/{spotify,logging}/**': { lines: 95 },
         'src/main/!(main|app-logging).ts': { lines: 95 },
-        'src/renderer/{fade,stall,media-session}.ts': { lines: 95 },
+        'src/renderer/{fade,stall}.ts': { lines: 95 },
       },
     },
   },
