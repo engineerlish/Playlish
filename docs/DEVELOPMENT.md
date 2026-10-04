@@ -1,7 +1,6 @@
-# Playlish spike: how to test it
+# Developing Playlish: setup, run and measure
 
-Goal of the spike: log in with PKCE, play one full track through the Web Playback SDK in castLabs Electron, and measure RAM/CPU.
-Unofficial; not affiliated with Spotify. Requires Spotify Premium on the developer account.
+How to run Playlish from source on Windows: the first-run wizard, signing the development Electron build for Widevine, running, and measuring. Unofficial; not affiliated with Spotify. Playback needs Spotify Premium.
 
 ## 1. First start: the setup wizard
 
@@ -9,7 +8,7 @@ Start Playlish (see step 3) and follow the wizard. It walks you through creating
 
 Never share or paste the Client secret anywhere; Playlish never uses it.
 
-If you used the spike before: its `spike.config.json` is imported into the settings on the first start, then removed (only after the Client ID has been saved and read back). `PLAYLISH_CLIENT_ID` still works as a developer override.
+If you used the early spike: its `spike.config.json` is imported into the settings on the first start, then removed (only after the Client ID has been saved and read back). `PLAYLISH_CLIENT_ID` still works as a developer override.
 
 ## 2. Create a castLabs EVS account and sign the dev Electron (once; this step needs you)
 
@@ -35,15 +34,21 @@ npm start            # opens the UI window
 npm run start:tray   # tray only (idle baseline)
 ```
 
-Click **Log in with Spotify**, approve in the browser, and the test track should start. Also try: the volume slider, **Fade ⏯** (pause/resume with a volume ramp), prev/next, and closing the UI window (music keeps playing from the tray icon; the tray icon's menu reopens the window).
+Click **Log in with Spotify** and approve in the browser. Nothing plays by itself: press Play to continue where your account left off, or pick something in Library or Search. Closing the window keeps Playlish in the tray (Settings can change that); the tray icon or its menu brings the window back.
+
+Useful switches: `--tray` (start in the tray), `--safe-mode` (all plugins off), `PLAYLISH_DEBUG=1` (debug logging), `PLAYLISH_CLIENT_ID` (developer override for the Client ID).
 
 ## 4. Measure
 
 - In-app: the Resources panel, and the CSV log at `%APPDATA%\Playlish\perf.csv` (sampled every 5 s).
 - External cross-check: `powershell -File scripts\measure.ps1 -Seconds 30`
 
-## Known spike limits (fixed in the MVP)
+## 5. Tests
 
-- Tokens are kept in memory only, so you log in on every start. Windows Credential Manager storage comes with the MVP.
-- No media keys/SMTC yet, and output-device selection is not tested yet.
-- The loopback server serves only the four spike files and the OAuth callback, bound to 127.0.0.1.
+```powershell
+npm run check   # typecheck, lint, unit and integration tests
+npm run e2e     # builds, then the end-to-end suite (Playwright, fake Spotify, no account needed)
+npm run smoke   # real login, Widevine playback and audio on this machine (needs your account)
+```
+
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for what each suite covers.

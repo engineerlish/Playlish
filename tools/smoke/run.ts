@@ -144,7 +144,7 @@ function preconditions(): boolean {
   } catch (err) {
     const e = err as { stderr?: Buffer | string; message?: string };
     const text = typeof e.stderr === 'string' ? e.stderr : e.stderr ? e.stderr.toString('utf8') : (e.message ?? '');
-    if (/development only/i.test(text)) vmp = { ...vmp, status: 'fail', details: 'Development-only signature: sign with castlabs_evs.vmp sign-pkg (see README-SPIKE.md).' };
+    if (/development only/i.test(text)) vmp = { ...vmp, status: 'fail', details: 'Development-only signature: sign with castlabs_evs.vmp sign-pkg (see docs/DEVELOPMENT.md).' };
   }
   record(vmp);
 
