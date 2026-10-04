@@ -5,9 +5,9 @@ import { Banners } from './Banners';
 import { NowPlayingBar } from './NowPlayingBar';
 import { DevicesPage } from './pages/DevicesPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { PluginsPage } from './pages/PluginsPage';
 import { QueuePage } from './pages/QueuePage';
 import { SearchPage } from './pages/SearchPage';
-import { PlaceholderPage } from './pages/PlaceholderPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SetupWizard } from './SetupWizard';
 import { Sidebar } from './Sidebar';
@@ -55,9 +55,11 @@ export function App() {
           {snapshot.status}
         </div>
         <Banners snapshot={snapshot} />
-        {/* Settings stays reachable while logged out: diagnostics and reporting must work without a login. */}
+        {/* Settings and Plugins stay reachable while logged out: diagnostics and safe mode must work without a login. */}
         {current === 'settings' ? (
           <SettingsPage snapshot={snapshot} />
+        ) : current === 'plugins' ? (
+          <PluginsPage snapshot={snapshot} />
         ) : !snapshot.loggedIn && !snapshot.configError ? (
           <section class="card">
             <h2>Log in to Spotify</h2>
@@ -68,14 +70,12 @@ export function App() {
           </section>
         ) : current === 'devices' ? (
           <DevicesPage snapshot={snapshot} />
-        ) : current === 'library' ? (
-          <LibraryPage />
         ) : current === 'search' ? (
           <SearchPage />
         ) : current === 'queue' ? (
           <QueuePage snapshot={snapshot} />
         ) : (
-          <PlaceholderPage page={current} />
+          <LibraryPage />
         )}
       </main>
       <NowPlayingBar snapshot={snapshot} />
