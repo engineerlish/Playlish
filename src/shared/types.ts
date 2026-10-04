@@ -38,6 +38,7 @@ export interface PlaybackState {
   durationMs: number;
   track: string;
   artists: string;
+  album: string;
   /** Volume 0..1 the user asked for (not the transient value during a fade, and not 0 while muted). */
   volume: number;
   /** Epoch ms when the position was sampled, so the UI can interpolate without polling. */

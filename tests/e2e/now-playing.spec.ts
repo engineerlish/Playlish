@@ -98,6 +98,18 @@ test.describe('Now Playing on this device', () => {
     await expect.poll(() => fake.requestsFor('PUT', '/v1/me/player/repeat').at(-1)?.query.get('state')).toBe('off');
   });
 
+  test('the Windows media overlay gets the track, art and play state', async ({ start }) => {
+    const { app } = await playingHere(start);
+    const overlay = () =>
+      inHost<{ title: string; artist: string; art: string[]; state: string }>(
+        app,
+        `({ title: navigator.mediaSession.metadata?.title, artist: navigator.mediaSession.metadata?.artist,
+            art: [...(navigator.mediaSession.metadata?.artwork ?? [])].map((a) => a.sizes), state: navigator.mediaSession.playbackState })`,
+      );
+
+    await expect.poll(overlay).toEqual({ title: 'E2E Song One', artist: 'E2E Artist', art: ['64x64', '300x300', '640x640'], state: 'playing' });
+  });
+
   test('no Web API polling while playing here', async ({ start, fake }) => {
     await playingHere(start);
     const before = fake.requestsFor('GET', '/v1/me/player').length;

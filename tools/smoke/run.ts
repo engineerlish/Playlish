@@ -251,6 +251,7 @@ async function playbackChecks(): Promise<void> {
   const back = bestOf(2, 2000);
   record({ id: 'fade', name: 'Fade pause and fade resume', status: faded < SILENCE && back > SOUND ? 'pass' : 'fail', details: `after fade-out ${faded}, after fade-in ${back}`, area: 'audio', severity: 'medium' });
 
+  await checkMediaOverlay();
   await checkTransfer();
 
   // The login must survive a restart (a bug once deleted the stored session on every start).
@@ -267,6 +268,47 @@ async function playbackChecks(): Promise<void> {
     area: 'auth',
     severity: 'high',
   });
+}
+
+/** Runs tools/smoke/media-overlay.ps1 for the given track title. */
+function overlay(title: string, action: 'find' | 'pause' | 'play'): { found: boolean; artist: string | null; status: string | null; sent: boolean | null } {
+  const script = path.join(ROOT, 'tools', 'smoke', 'media-overlay.ps1');
+  const out = execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Title', title, '-Action', action], { encoding: 'utf8' });
+  return JSON.parse(out.trim()) as { found: boolean; artist: string | null; status: string | null; sent: boolean | null };
+}
+
+/**
+ * Media keys and the Windows media overlay (#45): Playlish must appear in the overlay with the current track, and its
+ * pause and play buttons (the path media keys take) must silence and resume the audio. Only Playlish's own entry is
+ * touched.
+ */
+async function checkMediaOverlay(): Promise<void> {
+  const name = 'Media keys and Windows media overlay';
+  const title = (await evaluate(DEVTOOLS_PORT, '/ui.html', `document.getElementById('track')?.textContent ?? ''`)) as string;
+  try {
+    const shown = overlay(title, 'find');
+    if (!shown.found) {
+      record({ id: 'media-keys', name, status: 'fail', details: `"${title}" is not in the Windows media overlay`, area: 'player', severity: 'medium' });
+      return;
+    }
+    overlay(title, 'pause');
+    await sleep(2000);
+    const paused = meter(1500);
+    overlay(title, 'play');
+    await sleep(2500);
+    const resumed = bestOf(2, 2000);
+    const ok = paused < SILENCE && resumed > SOUND;
+    record({
+      id: 'media-keys',
+      name,
+      status: ok ? 'pass' : 'fail',
+      details: `overlay shows "${title}" (${shown.status ?? '?'}); after its pause button: peak ${paused}; after play: peak ${resumed}`,
+      area: 'player',
+      severity: 'medium',
+    });
+  } catch (err) {
+    record({ id: 'media-keys', name, status: 'fail', details: `could not read the media overlay: ${(err as Error).message.slice(0, 200)}`, area: 'player', severity: 'medium' });
+  }
 }
 
 /**
@@ -308,7 +350,6 @@ async function checkTransfer(): Promise<void> {
 /** Steps for features that do not exist yet; they become real checks as the MVP lands. */
 function notYetAvailable(): void {
   for (const [id, name, area] of [
-    ['media-keys', 'Media keys and Windows media overlay', 'player'],
     ['output-device', 'Output device switching', 'audio'],
     ['eq', 'Equalizer APO preset switching', 'audio'],
   ] as const) {

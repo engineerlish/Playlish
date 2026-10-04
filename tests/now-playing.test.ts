@@ -27,6 +27,7 @@ function sdkState(overrides: Partial<PlaybackState> = {}): PlaybackState {
     durationMs: 200_000,
     track: 'Here Song',
     artists: 'Here Artist',
+    album: 'Here Album',
     volume: 0.7,
     sampledAt: 5000,
     trackUri: 'spotify:track:here',
