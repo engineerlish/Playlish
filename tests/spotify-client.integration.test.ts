@@ -109,6 +109,18 @@ describe('reads parse the current response shapes', () => {
     expect(requests[1]?.query.get('offset')).toBe('50');
   });
 
+  it('reads album tracks (no album field) in album order, and caches them', async () => {
+    fake.on('GET', '/v1/albums/album00000000000000001/tracks', ok('album-tracks.json'));
+    const client = makeClient();
+
+    const page = await client.albumTracks('album00000000000000001');
+    await client.albumTracks('album00000000000000001');
+
+    expect(page.items.map((t) => t.name)).toEqual(['Album Opener', 'Album Closer']);
+    expect(page.items[1]?.is_playable).toBe(false);
+    expect(fake.requestsFor('GET', '/v1/albums/album00000000000000001/tracks')).toHaveLength(1);
+  });
+
   it('reads playlists by items.total and playlist entries under item, cached by snapshot', async () => {
     fake.on('GET', '/v1/me/playlists', ok('playlists.json'));
     fake.on('GET', '/v1/playlists/playlist0000000000001/items', ok('playlist-items.json'));

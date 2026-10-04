@@ -11,7 +11,7 @@
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/build-ui.mjs && node scripts/build-assets.mjs",
     "start": "npm run build && electron .",
     "start:tray": "npm run build && electron . --tray",
-    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.ui.json && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.tools.json",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.ui.json && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.tools.json",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

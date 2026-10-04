@@ -4,6 +4,7 @@ import type { Snapshot } from '../../shared/types';
 import { Banners } from './Banners';
 import { NowPlayingBar } from './NowPlayingBar';
 import { DevicesPage } from './pages/DevicesPage';
+import { LibraryPage } from './pages/LibraryPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SetupWizard } from './SetupWizard';
@@ -65,6 +66,8 @@ export function App() {
           </section>
         ) : current === 'devices' ? (
           <DevicesPage snapshot={snapshot} />
+        ) : current === 'library' ? (
+          <LibraryPage />
         ) : (
           <PlaceholderPage page={current} />
         )}

@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["tests/e2e/**/*.ts", "tests/helpers/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "playwright.config.ts"],
+  "exclude": []
+}

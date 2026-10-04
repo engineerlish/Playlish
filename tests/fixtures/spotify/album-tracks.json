@@ -1,0 +1,41 @@
+{
+  "href": "https://api.spotify.com/v1/albums/album00000000000000001/tracks?offset=0&limit=50",
+  "items": [
+    {
+      "id": "track00000000000000011",
+      "name": "Album Opener",
+      "uri": "spotify:track:track00000000000000011",
+      "type": "track",
+      "duration_ms": 201000,
+      "explicit": false,
+      "is_local": false,
+      "is_playable": true,
+      "track_number": 1,
+      "disc_number": 1,
+      "artists": [
+        { "id": "artist0000000000000001", "name": "Fixture Artist 1", "uri": "spotify:artist:artist0000000000000001", "type": "artist" }
+      ]
+    },
+    {
+      "id": "track00000000000000012",
+      "name": "Album Closer",
+      "uri": "spotify:track:track00000000000000012",
+      "type": "track",
+      "duration_ms": 254000,
+      "explicit": true,
+      "is_local": false,
+      "is_playable": false,
+      "track_number": 2,
+      "disc_number": 1,
+      "artists": [
+        { "id": "artist0000000000000001", "name": "Fixture Artist 1", "uri": "spotify:artist:artist0000000000000001", "type": "artist" },
+        { "id": "artist0000000000000002", "name": "Guest", "uri": "spotify:artist:artist0000000000000002", "type": "artist" }
+      ]
+    }
+  ],
+  "limit": 50,
+  "next": null,
+  "offset": 0,
+  "previous": null,
+  "total": 2
+}

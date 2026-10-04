@@ -23,6 +23,8 @@ export default tseslint.config(
   // The Preact UI is bundled by esbuild and checked with its own JSX settings.
   { files: ['src/renderer/ui/**/*.ts', 'src/renderer/ui/**/*.tsx'], ...typed('./tsconfig.ui.json') },
   { files: ['tests/**/*.ts'], ...typed('./tsconfig.test.json') },
+  // End-to-end tests also run code inside the app's pages, so they get the DOM types.
+  { files: ['tests/e2e/**/*.ts'], ...typed('./tsconfig.e2e.json') },
   { files: ['tools/**/*.ts'], ...typed('./tsconfig.tools.json') },
   // The Web Playback SDK stub runs in the playback host page (a browser), not in Node.
   {

@@ -386,6 +386,16 @@ describe('NowPlayingController', () => {
     expect(api.next).not.toHaveBeenCalled();
   });
 
+  it('starts new playback where music plays now, else on this computer', async () => {
+    const c = controller();
+    expect(c.targetDeviceId()).toBe('ours');
+    c.setVisible(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.targetDeviceId()).toBe('kitchen');
+    c.setHere(sdkState());
+    expect(c.targetDeviceId()).toBe('ours');
+  });
+
   it('reports API errors instead of throwing', async () => {
     api.pause.mockRejectedValue(new Error('403'));
     const c = controller();

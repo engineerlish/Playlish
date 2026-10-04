@@ -131,6 +131,35 @@ input[type="range"]:disabled { opacity: .5; }
 .check input { margin-top: 3px; accent-color: var(--accent); }
 .check .hint { display: block; font-size: 12px; }
 
+/* Library (#47): tabs, a fixed-height virtualized list, rows with art, text and actions. */
+.library { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.tab { border: 0; background: transparent; padding: 6px 12px; border-radius: 16px; }
+.tab.current { background: var(--fg); color: var(--bg); }
+.library-status { min-height: 1.2em; margin: 0 0 4px; font-size: 12px; }
+.vlist { flex: 1; min-height: 200px; overflow-y: auto; position: relative; contain: strict; }
+.vlist-space { position: relative; width: 100%; }
+.vrow { position: absolute; left: 0; right: 0; }
+.row { display: flex; align-items: center; gap: 4px; height: 100%; padding: 0 4px; border-radius: 6px; }
+.row:hover { background: var(--panel); }
+.row.loading { background: var(--panel); opacity: .4; margin: 6px 0; height: calc(100% - 12px); }
+.row.unavailable { opacity: .55; padding-left: 12px; }
+.row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; text-align: left; padding: 6px; }
+.row-main:disabled { cursor: default; opacity: 1; }
+.row-art { width: 40px; height: 40px; border-radius: 4px; flex: none; object-fit: cover; background: var(--panel); }
+.row-art.placeholder { display: grid; place-items: center; color: var(--muted); }
+.row-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.row-text > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-title { font-weight: 500; }
+.row-title-line { display: flex; align-items: center; min-width: 0; }
+.row-title-line .row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { font-size: 10px; border: 1px solid var(--muted); border-radius: 3px; padding: 0 3px; margin-left: 6px; color: var(--muted); }
+button.icon.small { width: 30px; height: 30px; font-size: 16px; }
+.detail-head { display: flex; gap: 16px; align-items: center; margin: 8px 0; }
+.detail-head .row-art { width: 96px; height: 96px; }
+.detail-head h1 { margin: 0; }
+.detail-head .meta { flex: 1; min-width: 0; }
+
 /* First-run wizard. */
 .wizard { max-width: 640px; margin: 0 auto; padding: 24px 20px; }
 .wizard ol, .wizard ul { padding-left: 20px; }

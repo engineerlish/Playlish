@@ -108,6 +108,73 @@ export interface DevicesView {
   error: string | null;
 }
 
+/* ----- library (#47) ----- */
+
+/** A list the Library page can show, loaded page by page. */
+export type LibraryList =
+  | { kind: 'tracks' }
+  | { kind: 'albums' }
+  | { kind: 'playlists' }
+  | { kind: 'album'; id: string }
+  | { kind: 'playlist'; id: string; snapshotId: string };
+
+export interface TrackRow {
+  kind: 'track';
+  uri: string;
+  name: string;
+  artists: string;
+  /** Empty inside an album (the album is the context). */
+  album: string;
+  durationMs: number;
+  /** Small image for the row, or null. */
+  artUrl: string | null;
+  /** False when Spotify cannot play it (removed, region, local file). */
+  playable: boolean;
+  explicit: boolean;
+}
+
+export interface AlbumRow {
+  kind: 'album';
+  id: string;
+  uri: string;
+  name: string;
+  artists: string;
+  artUrl: string | null;
+  totalTracks: number | null;
+}
+
+export interface PlaylistRow {
+  kind: 'playlist';
+  id: string;
+  uri: string;
+  name: string;
+  owner: string;
+  /** The user's own or a collaborative playlist: its entries can be listed. */
+  canList: boolean;
+  total: number;
+  artUrl: string | null;
+  snapshotId: string;
+}
+
+export type LibraryRow = TrackRow | AlbumRow | PlaylistRow;
+
+/** One page of a list. Entries Spotify no longer has are null (shown as "unavailable"). */
+export interface LibraryPage {
+  offset: number;
+  total: number;
+  rows: (LibraryRow | null)[];
+}
+
+export type LibraryResult = { ok: true; page: LibraryPage } | { ok: false; error: string };
+
+export type LibraryAction =
+  | { type: 'play'; contextUri?: string; offsetUri?: string; uris?: string[] }
+  | { type: 'queue'; uri: string }
+  | { type: 'save'; uris: string[] }
+  | { type: 'remove'; uris: string[] };
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
 /* ----- first-run setup (#40) ----- */
 
 export type SetupStep = 'welcome' | 'create-app' | 'client-id' | 'login' | 'player-check' | 'done';
@@ -207,6 +274,10 @@ export interface UiApi {
   transfer(deviceId: string): void;
   /** Turns a tray or start-up option on or off. */
   setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized', value: boolean): void;
+  /** One page of a library list (fetched on demand; nothing is kept in the main process beyond the API cache). */
+  library(list: LibraryList, offset: number): Promise<LibraryResult>;
+  /** Plays, queues, saves or removes library items. */
+  libraryAction(action: LibraryAction): Promise<ActionResult>;
   /** Sends an action to the first-run wizard. */
   setup(action: SetupAction): void;
   /** Signs out: deletes the stored session and stops the player. */
