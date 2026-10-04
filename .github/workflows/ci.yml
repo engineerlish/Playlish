@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      issues: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
@@ -167,7 +168,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      issues: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
