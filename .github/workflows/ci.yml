@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      actions: read
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
@@ -48,6 +49,16 @@ jobs:
 
       - name: Dependency audit
         run: npm run audit:deps
+
+      # main's latest coverage, so the summary can show the change. Missing on the first run; then no change is shown.
+      - name: Coverage baseline from main
+        if: always() && github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$id" ]; then gh run download "$id" --repo "$GITHUB_REPOSITORY" --name ci-reports --dir coverage-baseline || echo "No baseline on main yet."; fi
 
       - name: Write summary
         if: always()
