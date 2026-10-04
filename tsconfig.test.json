@@ -11,5 +11,6 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["tests/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "src/renderer/fade.ts", "src/renderer/stall.ts", "src/renderer/media-session.ts", "src/renderer/ui/list-math.ts", "tools/perf/analysis.ts", "tools/issues/format.ts"]
+  "include": ["tests/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts", "src/renderer/fade.ts", "src/renderer/stall.ts", "src/renderer/media-session.ts", "src/renderer/ui/list-math.ts", "tools/perf/analysis.ts", "tools/issues/format.ts"],
+  "exclude": ["tests/e2e/**"]
 }
