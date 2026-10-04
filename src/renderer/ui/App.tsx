@@ -5,6 +5,7 @@ import { Banners } from './Banners';
 import { NowPlayingBar } from './NowPlayingBar';
 import { DevicesPage } from './pages/DevicesPage';
 import { LibraryPage } from './pages/LibraryPage';
+import { SearchPage } from './pages/SearchPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SetupWizard } from './SetupWizard';
@@ -68,6 +69,8 @@ export function App() {
           <DevicesPage snapshot={snapshot} />
         ) : current === 'library' ? (
           <LibraryPage />
+        ) : current === 'search' ? (
+          <SearchPage />
         ) : (
           <PlaceholderPage page={current} />
         )}

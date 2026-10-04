@@ -1,8 +1,8 @@
-import type { ActionResult, AlbumRow, LibraryAction, LibraryList, LibraryPage, LibraryResult, PlaylistRow, TrackRow } from '../shared/types';
+import type { ActionResult, AlbumRow, ArtistRow, LibraryAction, LibraryList, LibraryPage, LibraryResult, PlaylistRow, SearchKind, TrackRow } from '../shared/types';
 import { pickArt } from './now-playing';
 import type { PlayOptions } from './spotify/client';
 import { SpotifyApiError, describeApiError } from './spotify/errors';
-import type { Episode, Paging, PlaylistItem, SavedAlbum, SavedTrack, SimplifiedPlaylist, SimplifiedTrack, Track } from './spotify/types';
+import type { Artist, Episode, Paging, PlaylistItem, SavedAlbum, SavedTrack, SearchResults, SearchType, SimplifiedPlaylist, SimplifiedTrack, Track } from './spotify/types';
 
 /*
  * The Library pages (#47): saved tracks, saved albums, playlists, and the tracks of an album or playlist.
@@ -19,6 +19,11 @@ export const ROW_ART_PX = 64;
 // CHANGE HERE: limits on what the window may ask for.
 export const MAX_OFFSET = 100_000;
 export const MAX_URIS = 200;
+// CHANGE HERE: search limits. The API returns at most 10 per type per page and no results past offset 1,000.
+export const SEARCH_PAGE = 10;
+export const SEARCH_MAX_OFFSET = 990;
+export const SEARCH_MAX_QUERY = 200;
+const SEARCH_KINDS: readonly SearchKind[] = ['track', 'album', 'artist', 'playlist'];
 
 const ID = /^[A-Za-z0-9]{1,64}$/;
 const URI = /^spotify:(track|episode|album|playlist|artist|show):[A-Za-z0-9]{1,64}$/;
@@ -83,6 +88,36 @@ export function playlistRow(p: SimplifiedPlaylist, myUserId: string | null): Pla
   };
 }
 
+export function artistRow(a: Artist): ArtistRow {
+  return { kind: 'artist', id: a.id, uri: a.uri, name: a.name, artUrl: pickArt(a.images, ROW_ART_PX) };
+}
+
+/** Checks a search from the window. Returns an error message, or null when it is fine. */
+export function checkSearch(query: unknown, kind: unknown, offset: unknown): string | null {
+  if (typeof query !== 'string' || query.trim() === '' || query.length > SEARCH_MAX_QUERY) return 'Type something to search for.';
+  if (typeof kind !== 'string' || !(SEARCH_KINDS as readonly string[]).includes(kind)) return 'Unknown kind of result.';
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0 || offset > SEARCH_MAX_OFFSET || offset % SEARCH_PAGE !== 0) return 'Invalid position in the results.';
+  return null;
+}
+
+/** One kind of search result as a page of rows. Spotify sometimes sends null playlists; they are left out. */
+export function searchPage(results: SearchResults, kind: SearchKind, offset: number, myUserId: string | null): LibraryPage {
+  switch (kind) {
+    case 'track':
+      return { offset, total: results.tracks?.total ?? 0, rows: (results.tracks?.items ?? []).map((t) => trackRow(t)) };
+    case 'album':
+      return { offset, total: results.albums?.total ?? 0, rows: (results.albums?.items ?? []).map(albumRow) };
+    case 'artist':
+      return { offset, total: results.artists?.total ?? 0, rows: (results.artists?.items ?? []).map(artistRow) };
+    case 'playlist':
+      return {
+        offset,
+        total: results.playlists?.total ?? 0,
+        rows: (results.playlists?.items ?? []).filter((p): p is SimplifiedPlaylist => p !== null).map((p) => playlistRow(p, myUserId)),
+      };
+  }
+}
+
 /** A playlist entry as a row; null when Spotify no longer has the track. */
 export function playlistItemRow(entry: PlaylistItem): TrackRow | null {
   const item = entry.item;
@@ -142,6 +177,7 @@ export interface LibraryApi {
   albumTracks(albumId: string, offset?: number, limit?: number): Promise<Paging<SimplifiedTrack>>;
   playlistItems(playlistId: string, snapshotId: string, offset?: number, limit?: number): Promise<Paging<PlaylistItem>>;
   me(): Promise<{ id: string }>;
+  search(query: string, types: SearchType[], offset?: number, limit?: number): Promise<SearchResults>;
   play(options?: PlayOptions): Promise<void>;
   addToQueue(uri: string, deviceId?: string): Promise<void>;
   saveToLibrary(uris: string[]): Promise<void>;
@@ -181,6 +217,22 @@ export class LibraryService {
       return { ok: true, page: await this.load(api, l, at) };
     } catch (err) {
       return { ok: false, error: describeLibraryError(err, l) };
+    }
+  }
+
+  /** One page of one kind of search result (user priority: someone is waiting for it). */
+  async search(query: unknown, kind: unknown, offset: unknown): Promise<LibraryResult> {
+    const problem = checkSearch(query, kind, offset);
+    if (problem) return { ok: false, error: problem };
+    const api = this.deps.api();
+    if (!api) return { ok: false, error: 'Log in to search.' };
+    const k = kind as SearchKind;
+    try {
+      const needsMe = k === 'playlist';
+      const [results, me] = await Promise.all([api.search(query as string, [k], offset as number, SEARCH_PAGE), needsMe ? api.me().catch(() => null) : null]);
+      return { ok: true, page: searchPage(results, k, offset as number, me?.id ?? null) };
+    } catch (err) {
+      return { ok: false, error: describeLibraryError(err) };
     }
   }
 

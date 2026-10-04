@@ -20,7 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'playlists', label: 'Playlists' },
 ];
 
-type Detail = { kind: 'album'; row: AlbumRow } | { kind: 'playlist'; row: PlaylistRow };
+export type Detail = { kind: 'album'; row: AlbumRow } | { kind: 'playlist'; row: PlaylistRow };
 
 /** Formats milliseconds as m:ss. */
 function clock(ms: number): string {
@@ -29,13 +29,13 @@ function clock(ms: number): string {
 }
 
 /** Runs an action and reports the outcome in the page's status line. */
-async function run(action: LibraryAction, say: (text: string) => void, done: string): Promise<boolean> {
+export async function run(action: LibraryAction, say: (text: string) => void, done: string): Promise<boolean> {
   const result = await window.ui.libraryAction(action);
   say(result.ok ? done : result.error);
   return result.ok;
 }
 
-function Art({ url }: { url: string | null }) {
+export function Art({ url }: { url: string | null }) {
   const [failed, setFailed] = useState(false);
   // Rows are reused while scrolling, so a failure belongs to one image address, not to the row.
   useEffect(() => setFailed(false), [url]);
@@ -72,14 +72,14 @@ export function LibraryPage() {
   );
 }
 
-function DetailView({ detail, onBack, status, say }: { detail: Detail; onBack: () => void; status: string; say: (t: string) => void }) {
+export function DetailView({ detail, onBack, status, say, backLabel = 'Library' }: { detail: Detail; onBack: () => void; status: string; say: (t: string) => void; backLabel?: string }) {
   const row = detail.row;
   const list: LibraryList = detail.kind === 'album' ? { kind: 'album', id: row.id } : { kind: 'playlist', id: row.id, snapshotId: detail.row.snapshotId };
   const canList = detail.kind === 'album' || detail.row.canList;
   return (
     <div id="page-library" class="library">
       <button id="libraryBack" class="text" onClick={onBack}>
-        ← Library
+        ← {backLabel}
       </button>
       <div class="detail-head">
         <Art url={row.artUrl} />
@@ -141,7 +141,7 @@ function ListView({ list, say, onOpen, contextUri }: { list: LibraryList; say: (
   return <VirtualList id={`list-${list.kind}`} label={TABS.find((t) => t.id === list.kind)?.label ?? 'Songs'} count={paged.total} rowHeight={ROW_HEIGHT} renderRow={renderRow} onRange={want} />;
 }
 
-function RowView(props: {
+export function RowView(props: {
   row: LibraryRow;
   index: number;
   liked: boolean;
@@ -186,6 +186,20 @@ function RowView(props: {
             ♡
           </button>
         )}
+      </div>
+    );
+  }
+  if (row.kind === 'artist') {
+    // No artist page yet: an artist row plays the artist.
+    return (
+      <div class="row">
+        <button class="row-main" title={`Play ${row.name}`} onClick={() => void run({ type: 'play', contextUri: row.uri }, say, `Playing ${row.name}.`)}>
+          <Art url={row.artUrl} />
+          <span class="row-text">
+            <span class="row-title">{row.name}</span>
+            <span class="muted">Artist</span>
+          </span>
+        </button>
       </div>
     );
   }

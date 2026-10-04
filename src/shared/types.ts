@@ -156,7 +156,18 @@ export interface PlaylistRow {
   snapshotId: string;
 }
 
-export type LibraryRow = TrackRow | AlbumRow | PlaylistRow;
+export interface ArtistRow {
+  kind: 'artist';
+  id: string;
+  uri: string;
+  name: string;
+  artUrl: string | null;
+}
+
+export type LibraryRow = TrackRow | AlbumRow | PlaylistRow | ArtistRow;
+
+/** What a search can look for (#48). */
+export type SearchKind = 'track' | 'album' | 'artist' | 'playlist';
 
 /** One page of a list. Entries Spotify no longer has are null (shown as "unavailable"). */
 export interface LibraryPage {
@@ -278,6 +289,8 @@ export interface UiApi {
   library(list: LibraryList, offset: number): Promise<LibraryResult>;
   /** Plays, queues, saves or removes library items. */
   libraryAction(action: LibraryAction): Promise<ActionResult>;
+  /** One page (10 results, the API maximum) of one kind of search result. */
+  search(query: string, kind: SearchKind, offset: number): Promise<LibraryResult>;
   /** Sends an action to the first-run wizard. */
   setup(action: SetupAction): void;
   /** Signs out: deletes the stored session and stops the player. */
