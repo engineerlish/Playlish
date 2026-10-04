@@ -283,6 +283,10 @@ describe('NowPlayingController', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(c.view()?.source).toBe('here');
+    // The late answer was dropped, so nothing stale shows once playback leaves this device.
+    api.playbackState.mockReturnValue(new Promise(() => undefined));
+    c.setHere(null);
+    expect(c.view()).toBeNull();
   });
 
   it('sends player commands to the SDK while playing here, shuffle and repeat to the Web API for this device', async () => {
