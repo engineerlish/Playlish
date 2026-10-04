@@ -59,4 +59,7 @@ function makeTrayPng(size) {
 }
 
 writeFileSync('dist/assets/tray.png', makeTrayPng(32));
+// App icon for the installer, the executable and the Start menu (electron-builder converts it to .ico).
+mkdirSync('build', { recursive: true });
+writeFileSync('build/icon.png', makeTrayPng(256));
 console.log('assets built');

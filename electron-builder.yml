@@ -1,0 +1,42 @@
+# Packaging for Windows (#80): a per-user installer and a portable zip, built from the castLabs Electron in
+# node_modules (Widevine), never a downloaded stock Electron. Run with `npm run dist`.
+appId: io.github.engineerlish.playlish
+productName: Playlish
+copyright: Copyright 2026 engineerlish
+directories:
+  output: release
+  buildResources: build
+# Only the built app ships: no sources, tests, source maps or development files.
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - package.json
+  - LICENSE
+  - NOTICE
+extraMetadata:
+  main: dist/main/main.js
+# The castLabs build with Widevine. CHANGE HERE when Electron is updated in package.json.
+electronDist: node_modules/electron/dist
+electronVersion: 44.1.0
+# English only, to keep the download small. CHANGE HERE when Playlish is translated.
+electronLanguages:
+  - en-US
+asar: true
+# Widevine (VMP) signing of the packaged app (scripts/vmp-sign.cjs). afterSign, not afterPack: it must come after any
+# Windows code signing (which changes the executable) and before the installer and zip are made.
+afterSign: scripts/vmp-sign.cjs
+win:
+  target:
+    - nsis
+    - zip
+  artifactName: Playlish-${version}-${arch}.${ext}
+nsis:
+  # Per user, no administrator rights; the uninstaller asks whether to keep settings.
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createStartMenuShortcut: true
+  createDesktopShortcut: false
+  artifactName: Playlish-Setup-${version}.${ext}
