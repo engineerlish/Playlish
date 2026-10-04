@@ -68,6 +68,8 @@ export interface LaunchOptions {
   clientId?: string;
   /** Start with only the tray icon. */
   trayOnly?: boolean;
+  /** Set false when the app is expected to start without a window (for example "start in the tray"). */
+  expectWindow?: boolean;
 }
 
 /** Launches Playlish and waits for its main window (unless tray-only). */
@@ -93,7 +95,7 @@ export async function launch(options: LaunchOptions): Promise<Launched> {
     env,
   });
   try {
-    const ui = options.trayOnly ? (undefined as unknown as Page) : await uiWindow(app);
+    const ui = options.trayOnly || options.expectWindow === false ? (undefined as unknown as Page) : await uiWindow(app);
     return { app, ui, userDataDir };
   } catch (err) {
     // The test never gets this app, so nothing else would close it: a leaked instance once kept running for hours
