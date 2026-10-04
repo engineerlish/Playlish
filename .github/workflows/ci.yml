@@ -67,6 +67,15 @@ jobs:
           node scripts/ci-summary.mjs ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
 
+      # Failed or flaky tests on main become issues (#14), one per failure, as github-actions[bot] with the built-in token.
+      # Pull request failures are not filed: they are in the pull request's own summary.
+      - name: File issues for failed or flaky tests
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/issues/ci-report.ts --vitest test-results.json
+
       # Same-repository pull requests only: forks get a read-only token, so they only see the job summary.
       - name: Comment on the pull request
         if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -104,6 +113,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
 
@@ -129,6 +139,15 @@ jobs:
         shell: bash
         run: node scripts/e2e-summary.mjs >> "$GITHUB_STEP_SUMMARY"
 
+      # Failed or flaky tests on main become issues (#14), one per failure, as github-actions[bot] with the built-in token.
+      # Pull request failures are not filed: they are in the pull request's own summary.
+      - name: File issues for failed or flaky tests
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/issues/ci-report.ts --playwright e2e-results/results.json
+
       # Screenshots, app logs and Playwright traces of failed tests (open a trace with npx playwright show-trace).
       - name: Upload failure artifacts
         if: failure()
@@ -148,6 +167,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      issues: write
       pull-requests: write
     steps:
       - uses: actions/checkout@v7

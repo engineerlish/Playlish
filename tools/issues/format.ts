@@ -28,6 +28,8 @@ export interface FailureReport {
   severity: 'critical' | 'high' | 'medium' | 'low';
   /** When the failure was seen (ISO). */
   seenAt: string;
+  /** Failed, then passed on the retry. */
+  flaky?: boolean;
 }
 
 export interface IssueDraft {
@@ -56,13 +58,13 @@ export function fingerprintMarker(id: string): string {
 /** Builds the issue title, body and labels for a failure. */
 export function buildIssue(report: FailureReport): IssueDraft {
   const id = fingerprint(report);
-  const prefix = report.kind === 'crash' ? '[crash]' : '[test-failure]';
+  const prefix = report.kind === 'crash' ? '[crash]' : report.flaky ? '[flaky-test]' : '[test-failure]';
   const title = redactText(`${prefix} ${report.suite}: ${report.name}`).slice(0, 200);
   const env = Object.entries(report.environment)
     .map(([k, v]) => `| ${k} | ${v} |`)
     .join('\n');
   const sections = [
-    `**What failed**\n${report.kind === 'smoke-failure' ? 'Local smoke test step' : 'Test'} \`${report.name}\` in \`${report.suite}\`.`,
+    `**What failed**\n${report.kind === 'smoke-failure' ? 'Local smoke test step' : 'Test'} \`${report.name}\` in \`${report.suite}\`${report.flaky ? ' (it failed, then passed on the retry)' : ''}.`,
     `**Error**\n\`\`\`\n${report.error}\n\`\`\``,
     ...(report.details ? [`**Details**\n\`\`\`\n${report.details}\n\`\`\``] : []),
     `**Where**\nCommit \`${report.commit}\` on \`${report.branch}\`${report.runLink ? ` · [run](${report.runLink})` : ''} · location \`${report.location}\``,
@@ -73,7 +75,7 @@ export function buildIssue(report: FailureReport): IssueDraft {
     `<!-- ${fingerprintMarker(id)} -->`,
   ];
   const labels = [
-    report.kind === 'crash' ? 'crash' : 'test-failure',
+    report.kind === 'crash' ? 'crash' : report.flaky ? 'flaky-test' : 'test-failure',
     `area:${report.area}`,
     `severity:${report.severity}`,
     'needs-triage',
