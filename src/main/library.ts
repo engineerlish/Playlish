@@ -1,8 +1,8 @@
-import type { ActionResult, AlbumRow, ArtistRow, LibraryAction, LibraryList, LibraryPage, LibraryResult, PlaylistRow, SearchKind, TrackRow } from '../shared/types';
+import type { ActionResult, AlbumRow, ArtistRow, LibraryAction, LibraryList, LibraryPage, LibraryResult, PlaylistRow, QueueResult, SearchKind, TrackRow } from '../shared/types';
 import { pickArt } from './now-playing';
 import type { PlayOptions } from './spotify/client';
 import { SpotifyApiError, describeApiError } from './spotify/errors';
-import type { Artist, Episode, Paging, PlaylistItem, SavedAlbum, SavedTrack, SearchResults, SearchType, SimplifiedPlaylist, SimplifiedTrack, Track } from './spotify/types';
+import type { Artist, Episode, Paging, PlayableItem, PlaylistItem, Queue, SavedAlbum, SavedTrack, SearchResults, SearchType, SimplifiedPlaylist, SimplifiedTrack, Track } from './spotify/types';
 
 /*
  * The Library pages (#47): saved tracks, saved albums, playlists, and the tracks of an album or playlist.
@@ -118,6 +118,11 @@ export function searchPage(results: SearchResults, kind: SearchKind, offset: num
   }
 }
 
+/** A track or episode as a row. */
+export function playableRow(item: PlayableItem): TrackRow {
+  return item.type === 'episode' ? episodeRow(item) : trackRow(item);
+}
+
 /** A playlist entry as a row; null when Spotify no longer has the track. */
 export function playlistItemRow(entry: PlaylistItem): TrackRow | null {
   const item = entry.item;
@@ -178,6 +183,7 @@ export interface LibraryApi {
   playlistItems(playlistId: string, snapshotId: string, offset?: number, limit?: number): Promise<Paging<PlaylistItem>>;
   me(): Promise<{ id: string }>;
   search(query: string, types: SearchType[], offset?: number, limit?: number): Promise<SearchResults>;
+  queueState(priority?: 'user' | 'visible' | 'background'): Promise<Queue>;
   play(options?: PlayOptions): Promise<void>;
   addToQueue(uri: string, deviceId?: string): Promise<void>;
   saveToLibrary(uris: string[]): Promise<void>;
@@ -231,6 +237,18 @@ export class LibraryService {
       const needsMe = k === 'playlist';
       const [results, me] = await Promise.all([api.search(query as string, [k], offset as number, SEARCH_PAGE), needsMe ? api.me().catch(() => null) : null]);
       return { ok: true, page: searchPage(results, k, offset as number, me?.id ?? null) };
+    } catch (err) {
+      return { ok: false, error: describeLibraryError(err) };
+    }
+  }
+
+  /** The queue: what plays now and what comes next. */
+  async queue(): Promise<QueueResult> {
+    const api = this.deps.api();
+    if (!api) return { ok: false, error: 'Log in to see your queue.' };
+    try {
+      const q = await api.queueState('visible');
+      return { ok: true, current: q.currently_playing ? playableRow(q.currently_playing) : null, next: q.queue.map(playableRow) };
     } catch (err) {
       return { ok: false, error: describeLibraryError(err) };
     }

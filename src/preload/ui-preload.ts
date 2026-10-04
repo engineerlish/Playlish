@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ActionResult, LibraryResult, Snapshot, UiApi, UiCommand } from '../shared/types';
+import type { ActionResult, LibraryResult, QueueResult, Snapshot, UiApi, UiCommand } from '../shared/types';
 
 /** Bridge for the UI window: send commands, receive snapshots. The UI never sees tokens. */
 const api: UiApi = {
@@ -16,6 +16,7 @@ const api: UiApi = {
   library: (list, offset) => ipcRenderer.invoke('ui:library', list, offset) as Promise<LibraryResult>,
   libraryAction: (action) => ipcRenderer.invoke('ui:library-action', action) as Promise<ActionResult>,
   search: (query, kind, offset) => ipcRenderer.invoke('ui:search', query, kind, offset) as Promise<LibraryResult>,
+  queue: () => ipcRenderer.invoke('ui:queue') as Promise<QueueResult>,
   setup: (action) => ipcRenderer.send('ui:setup', action),
   signOut: () => ipcRenderer.send('ui:sign-out'),
   exportDiagnostics: () => ipcRenderer.send('ui:export-diagnostics'),

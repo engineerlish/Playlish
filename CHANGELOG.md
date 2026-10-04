@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Queue: what plays now and what comes next (up to 20, as Spotify shows), loaded when you open the page and whenever the track changes, never on a timer. Add songs with + from any list.
 - Search: songs, albums, artists and playlists as you type (after a short pause), 10 results per kind with More for the next 10 (the API's maximum per page). Play a song (the results after it follow), an artist, an album or a playlist; open albums and playlists; add songs to the queue or Liked Songs.
 - Tray: the menu shows what is playing (and on which device) with Play/Pause, Next and Previous, and the tooltip names the track. New options on the Settings page: keep running in the tray when the window is closed (off means closing quits), minimize to the tray, and start in the tray. Starting Playlish again brings the running copy's window back.
 - Library: Liked Songs, saved albums and playlists, and the songs of an album or your own playlists. Play from any song (albums and playlists play on from there; liked songs play the songs after it), add to the queue, save to or remove from Liked Songs. Other people's playlists can be played; Spotify no longer lets apps list their songs, and the page says so. Lists load page by page as you scroll and only the visible rows exist in the window, so a 5,000-song library adds about 10 MB once scrolled through.

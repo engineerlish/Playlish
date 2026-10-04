@@ -186,6 +186,9 @@ export type LibraryAction =
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/** What plays now and what comes next (#49). Spotify shows up to 20 upcoming items. */
+export type QueueResult = { ok: true; current: TrackRow | null; next: TrackRow[] } | { ok: false; error: string };
+
 /* ----- first-run setup (#40) ----- */
 
 export type SetupStep = 'welcome' | 'create-app' | 'client-id' | 'login' | 'player-check' | 'done';
@@ -289,6 +292,8 @@ export interface UiApi {
   library(list: LibraryList, offset: number): Promise<LibraryResult>;
   /** Plays, queues, saves or removes library items. */
   libraryAction(action: LibraryAction): Promise<ActionResult>;
+  /** The playback queue, loaded when asked (page opened, track changed), never on a timer. */
+  queue(): Promise<QueueResult>;
   /** One page (10 results, the API maximum) of one kind of search result. */
   search(query: string, kind: SearchKind, offset: number): Promise<LibraryResult>;
   /** Sends an action to the first-run wizard. */
