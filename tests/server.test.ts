@@ -70,12 +70,14 @@ describe('static files', () => {
     expect(js.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
   });
 
-  it('serves every module the playback host imports', async () => {
-    for (const name of ['fade.js', 'stall.js']) fs.writeFileSync(path.join(webRoot, name), '// module');
+  it('serves every module the playback host imports (read from host.ts, so a new import cannot be forgotten)', async () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'host.ts'), 'utf8');
+    const modules = [...source.matchAll(/^import (?!type)[^;]*from '\.\/([\w-]+\.js)';/gm)].map((m) => m[1] ?? '');
+    expect(modules).toEqual(expect.arrayContaining(['fade.js', 'stall.js', 'media-session.js']));
+    for (const name of modules) fs.writeFileSync(path.join(webRoot, name), '// module');
     const port = await start();
 
-    expect((await fetch(`http://127.0.0.1:${port}/fade.js`)).status).toBe(200);
-    expect((await fetch(`http://127.0.0.1:${port}/stall.js`)).status).toBe(200);
+    for (const name of modules) expect((await fetch(`http://127.0.0.1:${port}/${name}`)).status, name).toBe(200);
   });
 
   it('does not serve files that exist in the web root but are not on the allowlist', async () => {

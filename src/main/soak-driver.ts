@@ -52,6 +52,7 @@ function soakState(paused: boolean, positionMs: number, now: number): PlaybackSt
     durationMs: 213_000,
     track: 'Soak test track',
     artists: 'Playlish',
+    album: 'Soak test album',
     volume: 0.5,
     sampledAt: now,
     trackUri: null,

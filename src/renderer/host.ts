@@ -1,5 +1,6 @@
 import type { ArtImage, HostApi, PlaybackState, PlayerCommand, RepeatMode } from '../shared/types';
 import { FadeController, VolumeRamper } from './fade.js';
+import { MediaSessionBridge } from './media-session.js';
 import { StallDetector, StallRecovery } from './stall.js';
 
 /* Minimal typings for the parts of the Spotify Web Playback SDK used here (avoids an extra @types dependency). */
@@ -7,7 +8,7 @@ interface SpotifyTrack {
   name: string;
   uri?: string;
   artists: { name: string }[];
-  album?: { images?: { url: string; width?: number | null; height?: number | null }[] };
+  album?: { name?: string; images?: { url: string; width?: number | null; height?: number | null }[] };
 }
 interface SpotifySdkState {
   paused: boolean;
@@ -56,6 +57,7 @@ const WATCHDOG_INTERVAL_MS = 2000;
 let player: SpotifyPlayer;
 let ramper: VolumeRamper;
 let fader: FadeController;
+let mediaSession: MediaSessionBridge | null = null;
 let baseVolume = INITIAL_VOLUME;
 let muted = false;
 const stallDetector = new StallDetector();
@@ -81,6 +83,7 @@ function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
     durationMs: state.duration,
     track: track.name,
     artists: track.artists.map((a) => a.name).join(', '),
+    album: track.album?.name ?? '',
     volume: baseVolume,
     sampledAt: Date.now(),
     trackUri: track.uri ?? null,
@@ -93,7 +96,9 @@ function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
 
 /** Reports the latest known state (used after volume changes too, since the SDK has no volume event). */
 function reportState(): void {
-  window.host.state(toPlaybackState(lastState));
+  const state = toPlaybackState(lastState);
+  window.host.state(state);
+  mediaSession?.update(state);
 }
 
 /**
@@ -177,6 +182,16 @@ function startPlayer(): void {
 
   ramper = new VolumeRamper(player, undefined, undefined, (err) => window.host.error('volume', String(err)));
   fader = new FadeController(player, ramper, () => baseVolume);
+  // Media keys, headset buttons and the Windows media overlay (#45).
+  if ('mediaSession' in navigator) {
+    mediaSession = new MediaSessionBridge(navigator.mediaSession, (init) => new MediaMetadata(init), {
+      resume: () => void player.resume(),
+      pause: () => void player.pause(),
+      next: () => void player.nextTrack(),
+      previous: () => void player.previousTrack(),
+      seek: (ms) => void player.seek(Math.max(0, Math.floor(ms))),
+    });
+  }
 
   on<{ device_id: string }>('ready', ({ device_id }) => window.host.ready(device_id));
   on<{ device_id: string }>('not_ready', () => window.host.error('not_ready', 'The player went offline.'));
