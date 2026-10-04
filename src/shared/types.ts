@@ -11,22 +11,66 @@ export type PlayerCommand =
   | { type: 'fadeToggle' }
   | { type: 'next' }
   | { type: 'previous' }
-  | { type: 'volume'; value: number };
+  | { type: 'volume'; value: number }
+  | { type: 'seek'; positionMs: number }
+  | { type: 'mute'; muted: boolean };
 
-/** Commands the UI window may send; `playTrack` is handled by the main process through the Web API. */
-export type UiCommand = PlayerCommand | { type: 'playTrack' };
+export type RepeatMode = 'off' | 'context' | 'track';
 
-/** Playback state as reported by the Web Playback SDK, reduced to what the UI needs. */
+/**
+ * Commands the UI window may send. The main process sends them to the playback host when Playlish is the playing
+ * device, or to the Web API when another device plays. Shuffle and repeat always go through the Web API (the SDK has
+ * no calls for them).
+ */
+export type UiCommand = PlayerCommand | { type: 'shuffle'; on: boolean } | { type: 'repeat'; mode: RepeatMode };
+
+/** An image offered by Spotify in several sizes. */
+export interface ArtImage {
+  url: string;
+  width: number | null;
+  height: number | null;
+}
+
+/** Playback state as reported by the Web Playback SDK, reduced to what the main process needs. */
 export interface PlaybackState {
   paused: boolean;
   positionMs: number;
   durationMs: number;
   track: string;
   artists: string;
-  /** Volume 0..1 the user asked for (not the transient value during a fade). */
+  /** Volume 0..1 the user asked for (not the transient value during a fade, and not 0 while muted). */
   volume: number;
   /** Epoch ms when the position was sampled, so the UI can interpolate without polling. */
   sampledAt: number;
+  trackUri: string | null;
+  /** Album art (or episode image) in every size Spotify offers. */
+  images: ArtImage[];
+  shuffle: boolean;
+  repeat: RepeatMode;
+  muted: boolean;
+}
+
+/** What the Now Playing bar shows, from this device (SDK events) or another device (polled Web API). */
+export interface NowPlaying {
+  /** 'here' when Playlish itself is the playing device. */
+  source: 'here' | 'elsewhere';
+  /** Name of the other device, when source is 'elsewhere'. */
+  deviceName: string | null;
+  paused: boolean;
+  positionMs: number;
+  durationMs: number;
+  /** Epoch ms when positionMs was sampled. */
+  sampledAt: number;
+  track: string;
+  artists: string;
+  trackUri: string | null;
+  /** The smallest image big enough for the bar, or null. */
+  artUrl: string | null;
+  shuffle: boolean;
+  repeat: RepeatMode;
+  /** 0..1, or null when the device does not allow volume changes. */
+  volume: number | null;
+  muted: boolean;
 }
 
 /** One resource sample covering every process of the app (main, GPU, renderers, utility). */
@@ -90,7 +134,8 @@ export interface Snapshot {
   configError: string | null;
   loggedIn: boolean;
   deviceReady: boolean;
-  playback: PlaybackState | null;
+  /** What is playing here or on another device; null when nothing is known to be playing. */
+  playback: NowPlaying | null;
   metrics: MetricsSample | null;
   perfLogPath: string;
   /** Set after a crash the user has not been asked about yet. */

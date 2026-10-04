@@ -8,6 +8,7 @@
 //   __stub.emit(event, payload)   fires any SDK event, such as 'playback_error' or 'account_error'
 //   __stub.state()                the current state (as getCurrentState would return it)
 //   __stub.freeze()               stops the position from advancing, to simulate a stalled player
+//   __stub.set({ shuffle, repeat }) changes shuffle or repeat (0 off, 1 context, 2 track), as Spotify would report it
 (() => {
   // CHANGE HERE: what the fake tracks are called and how long they are.
   const TRACKS = ['E2E Song One', 'E2E Song Two', 'E2E Song Three'];
@@ -20,6 +21,8 @@
   let current = null; // { paused, basePosition, since } or null before anything plays
   let frozen = false;
   let volume = 0.5;
+  let shuffle = false;
+  let repeatMode = 0;
 
   function emit(event, payload) {
     for (const callback of listeners.get(event) ?? []) callback(payload);
@@ -37,7 +40,18 @@
       paused: current.paused,
       position: position(),
       duration: DURATION_MS,
-      track_window: { current_track: { name: TRACKS[trackIndex], artists: [{ name: 'E2E Artist' }] } },
+      shuffle,
+      repeat_mode: repeatMode,
+      track_window: {
+        current_track: {
+          name: TRACKS[trackIndex],
+          uri: `spotify:track:e2e${trackIndex + 1}`,
+          artists: [{ name: 'E2E Artist' }],
+          album: {
+            images: [640, 64, 300].map((size) => ({ url: `https://i.scdn.co/image/e2e-${trackIndex + 1}-${size}`, width: size, height: size })),
+          },
+        },
+      },
     };
   }
 
@@ -110,6 +124,12 @@
       emit('player_state_changed', state());
       return Promise.resolve();
     }
+    seek(positionMs) {
+      record('seek', [positionMs]);
+      if (current) current = { ...current, basePosition: positionMs, since: Date.now() };
+      emit('player_state_changed', state());
+      return Promise.resolve();
+    }
     setVolume(value) {
       record('setVolume', [value]);
       volume = value;
@@ -130,6 +150,11 @@
       if (name) trackIndex = Math.max(0, TRACKS.indexOf(name));
       frozen = false;
       current = { paused: false, basePosition: 0, since: Date.now() };
+      emit('player_state_changed', state());
+    },
+    set(changes) {
+      if ('shuffle' in changes) shuffle = changes.shuffle;
+      if ('repeat' in changes) repeatMode = changes.repeat;
       emit('player_state_changed', state());
     },
     freeze() {

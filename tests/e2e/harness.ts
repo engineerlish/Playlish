@@ -47,6 +47,10 @@ export function scriptWorkingAccount(fake: FakeSpotify): void {
     body: { access_token: 'e2e-access-token', token_type: 'Bearer', expires_in: 3600, refresh_token: REFRESH_TOKEN, scope: SCOPES.join(' ') },
   });
   fake.on('PUT', '/v1/me/player/play', { status: 204 });
+  // Nothing plays on other devices unless a test says so.
+  fake.on('GET', '/v1/me/player', { status: 204 });
+  for (const path of ['/v1/me/player/pause', '/v1/me/player/seek', '/v1/me/player/shuffle', '/v1/me/player/repeat', '/v1/me/player/volume']) fake.on('PUT', path, { status: 204 });
+  for (const path of ['/v1/me/player/next', '/v1/me/player/previous']) fake.on('POST', path, { status: 204 });
 }
 
 export interface Launched {

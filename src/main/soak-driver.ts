@@ -46,7 +46,20 @@ const realTimers: SoakTimers = {
 
 /** A simulated state of the soak test track. */
 function soakState(paused: boolean, positionMs: number, now: number): PlaybackState {
-  return { paused, positionMs, durationMs: 213_000, track: 'Soak test track', artists: 'Playlish', volume: 0.5, sampledAt: now };
+  return {
+    paused,
+    positionMs,
+    durationMs: 213_000,
+    track: 'Soak test track',
+    artists: 'Playlish',
+    volume: 0.5,
+    sampledAt: now,
+    trackUri: null,
+    images: [],
+    shuffle: false,
+    repeat: 'off',
+    muted: false,
+  };
 }
 
 /** Starts cycling immediately and returns a function that stops the driver and any pending steps. */

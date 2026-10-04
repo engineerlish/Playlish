@@ -13,16 +13,22 @@ test.describe('main window states', () => {
     await expect(ui.locator('#volume')).toBeDisabled();
   });
 
-  test('ready: after login the player starts the track through the Web API', async ({ start, fake }) => {
+  test('ready: nothing plays by itself, and Play resumes the last playback on this device', async ({ start, fake }) => {
     const { app, ui } = await start({ clientId: TEST_CLIENT_ID });
     await ui.click('#login');
     await waitForPlayerReady(app);
 
-    await expect(ui.locator('#status')).toHaveText('Playing.');
-    await expect(ui.locator('#toggle')).toBeEnabled();
+    await expect(ui.locator('#status')).toHaveText('Player ready.');
+    await expect(ui.locator('#track')).toHaveText('Nothing playing');
+    expect(fake.requestsFor('PUT', '/v1/me/player/play')).toHaveLength(0);
+
+    await ui.click('#toggle');
+    await expect.poll(() => fake.requestsFor('PUT', '/v1/me/player/play').length).toBe(1);
     const [play] = fake.requestsFor('PUT', '/v1/me/player/play');
     expect(play?.query.get('device_id')).toBe('e2e-device');
     expect(play?.headers.authorization).toBe('Bearer e2e-access-token');
+    // A resume of whatever the account played last, not a specific track.
+    expect(play?.body).toBeUndefined();
   });
 
   test('playing and paused: the Now Playing bar follows the player', async ({ start }) => {
@@ -37,9 +43,9 @@ test.describe('main window states', () => {
 
     await ui.click('#toggle');
     await expect(ui.locator('#toggle')).toHaveAttribute('aria-label', 'Play');
-    const paused = await ui.locator('#progress').getAttribute('value');
+    const paused = await ui.locator('#seek').inputValue();
     await ui.waitForTimeout(700);
-    expect(await ui.locator('#progress').getAttribute('value')).toBe(paused);
+    expect(await ui.locator('#seek').inputValue()).toBe(paused);
   });
 
   test('player error: an account Spotify refuses gets a plain explanation', async ({ start }) => {
