@@ -100,6 +100,9 @@ export class FakeSpotify {
     const payload = response.body === undefined ? '' : isText ? (response.body as string) : JSON.stringify(response.body);
     res.writeHead(response.status, {
       ...(response.body !== undefined && !isText ? { 'Content-Type': 'application/json' } : {}),
+      // No kept-alive sockets: on Windows, Node 24 test workers sometimes crashed at exit (0xC0000409, a libuv
+      // assertion) while fetch's pooled connections to this server were still closing.
+      Connection: 'close',
       ...response.headers,
     });
     res.end(payload);
