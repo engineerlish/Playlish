@@ -168,6 +168,8 @@ button.icon.small { width: 30px; height: 30px; font-size: 16px; }
 ul.plain { list-style: none; margin: 0; padding: 0; }
 .search-row { height: 56px; }
 .hidden { display: none; }
+.row-head { display: flex; align-items: baseline; gap: 12px; }
+ol.plain { list-style: none; margin: 0; padding: 0; }
 
 /* First-run wizard. */
 .wizard { max-width: 640px; margin: 0 auto; padding: 24px 20px; }

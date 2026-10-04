@@ -163,6 +163,26 @@ describe('search (#48)', () => {
   });
 });
 
+describe('queue (#49)', () => {
+  it('shows what plays now and what comes next, episodes included', async () => {
+    fake.on('GET', '/v1/me/player/queue', ok('queue.json'));
+
+    const result = await service().queue();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.current?.kind).toBe('track');
+    expect(result.next.length).toBeGreaterThan(0);
+    expect(result.next.every((r) => r.kind === 'track' && r.uri.startsWith('spotify:'))).toBe(true);
+  });
+
+  it('reports a failure as a message', async () => {
+    fake.on('GET', '/v1/me/player/queue', { status: 403, body: fixture('error-premium.json') });
+
+    expect((await service().queue()).ok).toBe(false);
+  });
+});
+
 describe('library actions', () => {
   it('plays a context from a track on the target device', async () => {
     fake.on('PUT', '/v1/me/player/play', { status: 204 });
