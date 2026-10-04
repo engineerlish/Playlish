@@ -52,7 +52,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  fs.rmSync(dir, { recursive: true, force: true });
+  // Retries cover a late append still holding the file on Windows (ENOTEMPTY / EBUSY), see #52.
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('MetricsLogger', () => {
@@ -86,6 +87,8 @@ describe('MetricsLogger', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(samples).toHaveLength(2);
     logger.stop();
+    // Let both asynchronous appends finish before the temp folder is deleted (#52: deleting it mid-write failed on CI).
+    await lines(3);
   });
 
   it('sums memory and CPU across all processes and converts KB to MB', async () => {
