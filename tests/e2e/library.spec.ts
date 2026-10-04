@@ -101,6 +101,23 @@ test.describe('library', () => {
     await expect.poll(() => fake.requestsFor('GET', '/v1/me/tracks').length).toBeGreaterThan(loadsBefore);
   });
 
+  test('removing a song far down the list keeps the scroll position and reloads the rows on screen', async ({ start, fake }) => {
+    const { ui } = await openLibrary(start, fake, 1000);
+    await expect(ui.locator('#list-tracks .row-title').first()).toHaveText('Liked Song 1');
+    await ui.locator('#list-tracks').evaluate((el) => el.scrollTo(0, 56 * 600));
+    await expect(ui.locator('#list-tracks .row-title', { hasText: /^Liked Song 605$/ })).toBeVisible();
+    const top = await ui.locator('#list-tracks').evaluate((el) => el.scrollTop);
+
+    await ui.getByRole('button', { name: 'Remove Liked Song 605 from Liked Songs' }).click();
+
+    await expect.poll(() => fake.requestsFor('DELETE', '/v1/me/library').length).toBe(1);
+    // The rows on screen load again (page 12, offset 600) without scrolling back to the top.
+    await expect.poll(() => fake.requestsFor('GET', '/v1/me/tracks').filter((r) => r.query.get('offset') === '600').length).toBeGreaterThanOrEqual(2);
+    await expect(ui.locator('#list-tracks .row-title', { hasText: /^Liked Song 606$/ })).toBeVisible();
+    expect(await ui.locator('#list-tracks').evaluate((el) => el.scrollTop)).toBe(top);
+    await expect(ui.locator('#list-tracks .row.loading')).toHaveCount(0);
+  });
+
   test("an album opens to its songs and plays from the chosen one; songs Spotify can't play are disabled", async ({ start, fake }) => {
     const { ui } = await openLibrary(start, fake);
     await ui.click('#tab-albums');

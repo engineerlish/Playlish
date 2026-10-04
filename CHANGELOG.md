@@ -59,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Removing a song from Liked Songs while scrolled down no longer jumps the list back to the top; the songs on screen reload in place.
 - The rate limit message no longer promises a retry that never happened: playback now goes through the request queue, which really does retry after Retry-After (#24).
 - `npm install` now downloads the castLabs Electron binary (its package has no install script of its own); an existing, signed binary is kept.
 - Some launches played no audio even though the player said it was playing (#17). The startup sequence sent a transfer immediately before the play command, which aborted the first audio load. The redundant transfer is gone (17 of 18 launches played afterwards, against 11 of 27 before).
