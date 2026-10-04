@@ -12,6 +12,7 @@ import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
 import { DevicesController } from './devices';
+import { LibraryService } from './library';
 import { NowPlayingController } from './now-playing';
 import { resultPage, startServer } from './server';
 import { SessionHolder } from './session-holder';
@@ -476,6 +477,13 @@ const devices = new DevicesController({
   },
 });
 
+// Library pages: one page per request, checked before it reaches the Web API (#47).
+const library = new LibraryService({
+  api: () => (auth?.isLoggedIn() ? spotify : null),
+  targetDeviceId: () => nowPlaying.targetDeviceId(),
+  afterPlay: () => void nowPlaying.refresh(),
+});
+
 /** The login (and API client) for a Client ID; a new one only if the Client ID changed. */
 function startSession(id: string): Auth {
   auth = sessions.use(id);
@@ -694,6 +702,8 @@ function registerIpc(): void {
     settings?.update({ [key]: value });
     pushSnapshot();
   });
+  ipcMain.handle('ui:library', (_event, list: unknown, offset: unknown) => library.page(list, offset));
+  ipcMain.handle('ui:library-action', (_event, action: unknown) => library.action(action));
   ipcMain.on('ui:transfer', (_event, id: unknown) => {
     if (typeof id === 'string') void devices.transfer(id);
   });

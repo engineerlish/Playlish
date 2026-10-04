@@ -14,6 +14,7 @@ import type {
   SearchResults,
   SearchType,
   SimplifiedPlaylist,
+  SimplifiedTrack,
 } from './types';
 
 /*
@@ -232,6 +233,16 @@ export class SpotifyClient {
   playlists(offset = 0, limit = MAX_PAGE, priority: Priority = 'visible'): Promise<Paging<SimplifiedPlaylist>> {
     const l = clampLimit(limit, MAX_PAGE);
     return this.request({ method: 'GET', path: '/me/playlists', endpoint: 'GET /me/playlists', priority, query: { offset, limit: l }, cacheKey: `library:playlists:${offset}:${l}`, ttlMs: TTL.library, validate: paging<SimplifiedPlaylist>('GET /me/playlists') });
+  }
+
+  /** Tracks of an album, in album order. */
+  albumTracks(albumId: string, offset = 0, limit = MAX_PAGE, priority: Priority = 'visible'): Promise<Paging<SimplifiedTrack>> {
+    const l = clampLimit(limit, MAX_PAGE);
+    return this.request({
+      method: 'GET', path: `/albums/${encodeURIComponent(albumId)}/tracks`, endpoint: 'GET /albums/{id}/tracks', priority,
+      query: { offset, limit: l },
+      cacheKey: `album:${albumId}:${offset}:${l}`, ttlMs: TTL.library, validate: paging<SimplifiedTrack>('GET /albums/{id}/tracks'),
+    });
   }
 
   /**

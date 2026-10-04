@@ -137,6 +137,12 @@ export class NowPlayingController {
     return this.here !== null;
   }
 
+  /** Where new playback should start: the device playing now, else this computer (null before the player is ready). */
+  targetDeviceId(): string | null {
+    if (!this.here && this.elsewhere && this.elsewhereDeviceId) return this.elsewhereDeviceId;
+    return this.deps.ownDeviceId();
+  }
+
   /** New state from the SDK (null when playback moved to another device or the host went away). */
   setHere(state: PlaybackState | null): void {
     const wasHere = this.here !== null;

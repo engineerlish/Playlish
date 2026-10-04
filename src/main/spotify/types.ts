@@ -62,6 +62,9 @@ export interface Episode {
 
 export type PlayableItem = Track | Episode;
 
+/** A track as listed inside an album (no album field: the album is the context). */
+export type SimplifiedTrack = Omit<Track, 'album'>;
+
 export interface Paging<T> {
   items: T[];
   total: number;

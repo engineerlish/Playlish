@@ -2,7 +2,6 @@ import { PAGE_LABELS, type Page } from '../../../shared/pages';
 
 // CHANGE HERE: what each page will hold, shown until it is built.
 const COMING: Partial<Record<Page, string>> = {
-  library: 'Your saved tracks, albums and playlists will appear here.',
   search: 'Search for tracks, albums, artists and playlists here.',
   queue: 'What plays next will appear here.',
   plugins: 'Installed plugins will appear here. Playlish starts with all plugins off in safe mode.',

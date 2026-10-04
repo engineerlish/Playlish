@@ -28,7 +28,8 @@ export const test = base.extend<Fixtures>({
     const runs: Launched[] = [];
     await use(async (options = {}) => {
       const launched = await launch({ fake, ...options });
-      await launched.app.context().tracing.start({ screenshots: true, snapshots: true });
+      // E2E_NO_TRACE=1 turns tracing off, for measuring memory without the trace's screenshots and snapshots.
+      if (process.env['E2E_NO_TRACE'] !== '1') await launched.app.context().tracing.start({ screenshots: true, snapshots: true });
       runs.push(launched);
       return launched;
     });
