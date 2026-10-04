@@ -58,12 +58,35 @@ async function closeMainWindow(app: ElectronApplication): Promise<void> {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test.describe('Now Playing on this device', () => {
-  test('shows the track and no device label', async ({ start }) => {
+  test('shows the track, the smallest big-enough album art and no device label', async ({ start }) => {
     const { ui } = await playingHere(start);
 
     await expect(ui.locator('#track')).toHaveText('E2E Song One');
     await expect(ui.locator('#artists')).toHaveText('E2E Artist');
+    await expect(ui.locator('#art')).toHaveAttribute('src', 'https://i.scdn.co/image/e2e-1-300');
+    // Loaded, not blocked by the content security policy (a blocked image is replaced by the placeholder).
+    await expect.poll(() => ui.locator('#art').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
     await expect(ui.locator('#device')).toHaveCount(0);
+  });
+
+  test('the content security policy blocks images from any other host', async ({ start }) => {
+    const { ui } = await playingHere(start);
+
+    // Test mode answers every outside request with an error anyway, so look for the policy's own violation event.
+    const blocked = await ui.evaluate(
+      () =>
+        new Promise<string[]>((resolve) => {
+          const seen: string[] = [];
+          document.addEventListener('securitypolicyviolation', (e) => seen.push(`${e.effectiveDirective} ${e.blockedURI}`));
+          for (const src of ['https://example.com/tracker.png', 'https://i.scdn.co/image/allowed']) {
+            const img = new Image();
+            img.src = src;
+          }
+          setTimeout(() => resolve(seen), 1000);
+        }),
+    );
+
+    expect(blocked).toEqual(['img-src https://example.com/tracker.png']);
   });
 
   test('seek, mute and unmute go to the player here', async ({ start }) => {
@@ -128,6 +151,7 @@ test.describe('Now Playing on another device', () => {
 
     await expect(ui.locator('#track')).toHaveText('Kitchen Song');
     await expect(ui.locator('#device')).toHaveText(/Playing on Kitchen speaker/);
+    await expect(ui.locator('#art')).toHaveAttribute('src', 'https://i.scdn.co/image/kitchen-300');
 
     await ui.click('#toggle');
     expect((await lastQuery(fake, 'PUT', '/v1/me/player/pause')).get('device_id')).toBe('kitchen');
