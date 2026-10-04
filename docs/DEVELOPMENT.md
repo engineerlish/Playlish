@@ -43,7 +43,19 @@ Useful switches: `--tray` (start in the tray), `--safe-mode` (all plugins off), 
 - In-app: the Resources panel, and the CSV log at `%APPDATA%\Playlish\perf.csv` (sampled every 5 s).
 - External cross-check: `powershell -File scripts\measure.ps1 -Seconds 30`
 
-## 5. Tests
+## 5. Build the installer
+
+```powershell
+npm run dist
+```
+
+This builds the app and packages it with electron-builder (`electron-builder.yml`) into `release\`: a per-user installer (`Playlish-Setup-<version>.exe`, no administrator rights) and a portable zip. It uses the castLabs Electron from `node_modules`, never a downloaded stock Electron.
+
+Between packaging and making the installer, `scripts/vmp-sign.cjs` VMP-signs the packaged app with your EVS account and verifies the signature (re-login with `py -3.9 -m castlabs_evs.account reauth` if it has expired). Without that signature Spotify may refuse to play. For a quick local test build that does not need to play, set `$env:PLAYLISH_SKIP_VMP = '1'` first.
+
+The installer is not code-signed (Authenticode), so Windows SmartScreen warns on first run until a release has enough downloads.
+
+## 6. Tests
 
 ```powershell
 npm run check   # typecheck, lint, unit and integration tests

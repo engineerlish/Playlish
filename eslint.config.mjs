@@ -33,8 +33,8 @@ export default tseslint.config(
   },
   // Plain JS/config files: no type information.
   {
-    files: ['**/*.mjs', '**/*.config.ts', '**/*.config.mts'],
+    files: ['**/*.mjs', '**/*.cjs', '**/*.config.ts', '**/*.config.mts'],
     extends: [tseslint.configs.disableTypeChecked],
-    languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly' } },
+    languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', require: 'readonly', module: 'writable' } },
   },
 );
