@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain,
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isPage } from '../shared/pages';
-import type { PlaybackState, PlayerCommand, SetupAction, Snapshot, UiCommand } from '../shared/types';
+import type { PlaybackState, PlayerCommand, SetupAction, Snapshot } from '../shared/types';
 import { appInfo, initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
 import { DEFAULT_PORT, DEFAULT_TRACK_URI, importLegacyConfig, redirectUriFor, resolveClientId } from './config';
@@ -20,6 +20,7 @@ import { SessionHolder } from './session-holder';
 import { SettingsStore, isPreferenceKey } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
+import { parseUiCommand } from './ui-command';
 import { trayKey, trayMenu, trayTooltip, type TrayAction, type TrayItem } from './tray-menu';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyClient } from './spotify/client';
@@ -701,7 +702,11 @@ function registerIpc(): void {
     crashNotice = null;
     pushSnapshot();
   });
-  ipcMain.on('ui:command', (_event, command: UiCommand) => void nowPlaying.command(command));
+  ipcMain.on('ui:command', (_event, input: unknown) => {
+    const command = parseUiCommand(input);
+    if (command) void nowPlaying.command(command);
+    else uiLog.warn('Ignored a malformed command from the window', { code: 'UI_COMMAND_INVALID' });
+  });
   ipcMain.on('ui:devices-refresh', () => void devices.refresh());
   ipcMain.on('ui:restart', (_event, safe: unknown) => {
     if (typeof safe !== 'boolean') return;
