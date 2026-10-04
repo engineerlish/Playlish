@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-04
+
+The first release: a lightweight Spotify player for Windows with Now Playing, Library, Search, Queue, Devices, media keys, the tray, and the groundwork for plugins.
+
 ### Added
 
 - Windows packaging (`npm run dist`): a per-user installer (no administrator rights; the uninstaller can keep your settings) and a portable zip, built from the castLabs Electron, with Widevine VMP signing of the packaged app before the installer is made.
