@@ -11,19 +11,11 @@ export function DevicePicker({ view, disabled }: { view: DevicesView; disabled: 
   useEffect(() => {
     if (!open) return;
     window.ui.refreshDevices();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        root.current?.querySelector<HTMLButtonElement>('#devicePicker')?.focus();
-      }
-    };
     const onClick = (e: MouseEvent) => {
       if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
     };
-    window.addEventListener('keydown', onKey);
     window.addEventListener('mousedown', onClick);
     return () => {
-      window.removeEventListener('keydown', onKey);
       window.removeEventListener('mousedown', onClick);
     };
   }, [open]);
@@ -36,7 +28,18 @@ export function DevicePicker({ view, disabled }: { view: DevicesView; disabled: 
   }, [view.transferring]);
 
   return (
-    <div class="picker" ref={root}>
+    // Escape is handled on the picker itself, so it works the moment the list is drawn (#81: a listener added in an
+    // effect could miss an Escape pressed right after opening).
+    <div
+      class="picker"
+      ref={root}
+      onKeyDown={(e) => {
+        if (open && e.key === 'Escape') {
+          setOpen(false);
+          root.current?.querySelector<HTMLButtonElement>('#devicePicker')?.focus();
+        }
+      }}
+    >
       <button
         id="devicePicker"
         class={`icon${open ? ' on' : ''}`}
