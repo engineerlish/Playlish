@@ -1,6 +1,5 @@
 import type { ArtImage, HostApi, PlaybackState, PlayerCommand, RepeatMode } from '../shared/types';
 import { FadeController, VolumeRamper } from './fade.js';
-import { MediaSessionBridge } from './media-session.js';
 import { StallDetector, StallRecovery } from './stall.js';
 
 /* Minimal typings for the parts of the Spotify Web Playback SDK used here (avoids an extra @types dependency). */
@@ -36,6 +35,8 @@ interface SpotifyNamespace {
     name: string;
     getOAuthToken: (callback: (token: string) => void) => void;
     volume?: number;
+    /** Lets the SDK's own player (inside its iframe, where the audio plays) drive media keys and the OS overlay. */
+    enableMediaSession?: boolean;
   }) => SpotifyPlayer;
 }
 
@@ -57,7 +58,6 @@ const WATCHDOG_INTERVAL_MS = 2000;
 let player: SpotifyPlayer;
 let ramper: VolumeRamper;
 let fader: FadeController;
-let mediaSession: MediaSessionBridge | null = null;
 let baseVolume = INITIAL_VOLUME;
 let muted = false;
 const stallDetector = new StallDetector();
@@ -98,7 +98,6 @@ function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
 function reportState(): void {
   const state = toPlaybackState(lastState);
   window.host.state(state);
-  mediaSession?.update(state);
 }
 
 /**
@@ -174,6 +173,10 @@ function handleCommand(command: PlayerCommand): void {
 function startPlayer(): void {
   player = new window.Spotify.Player({
     name: DEVICE_NAME,
+    // Media keys, headset buttons and the Windows media overlay (#45). The SDK plays inside its own iframe, and only the
+    // frame with the audio can report the real play state to Windows; a Media Session in this page showed the track
+    // as paused and its buttons did nothing (smoke test, 2026-10-04).
+    enableMediaSession: true,
     volume: INITIAL_VOLUME,
     getOAuthToken: (callback) => {
       window.host.getToken().then(callback, (err: Error) => window.host.error('token', err.message));
@@ -182,17 +185,6 @@ function startPlayer(): void {
 
   ramper = new VolumeRamper(player, undefined, undefined, (err) => window.host.error('volume', String(err)));
   fader = new FadeController(player, ramper, () => baseVolume);
-  // Media keys, headset buttons and the Windows media overlay (#45).
-  if ('mediaSession' in navigator) {
-    mediaSession = new MediaSessionBridge(navigator.mediaSession, (init) => new MediaMetadata(init), {
-      resume: () => void player.resume(),
-      pause: () => void player.pause(),
-      next: () => void player.nextTrack(),
-      previous: () => void player.previousTrack(),
-      seek: (ms) => void player.seek(Math.max(0, Math.floor(ms))),
-    });
-  }
-
   on<{ device_id: string }>('ready', ({ device_id }) => window.host.ready(device_id));
   on<{ device_id: string }>('not_ready', () => window.host.error('not_ready', 'The player went offline.'));
   on<SpotifySdkState | null>('player_state_changed', (state) => {

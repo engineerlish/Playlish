@@ -61,6 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Media keys and the Windows media overlay: the overlay showed the track as paused while it played, and its buttons did nothing. Spotify's player now drives them itself from the frame that plays the audio.
 - Player commands from the window are checked in the main process; a malformed one (for example a seek to an invalid position) is ignored and logged instead of being sent to Spotify.
 - Removing a song from Liked Songs while scrolled down no longer jumps the list back to the top; the songs on screen reload in place.
 - The rate limit message no longer promises a retry that never happened: playback now goes through the request queue, which really does retry after Retry-After (#24).

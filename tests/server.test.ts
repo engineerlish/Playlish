@@ -73,7 +73,7 @@ describe('static files', () => {
   it('serves every module the playback host imports (read from host.ts, so a new import cannot be forgotten)', async () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'host.ts'), 'utf8');
     const modules = [...source.matchAll(/^import (?!type)[^;]*from '\.\/([\w-]+\.js)';/gm)].map((m) => m[1] ?? '');
-    expect(modules).toEqual(expect.arrayContaining(['fade.js', 'stall.js', 'media-session.js']));
+    expect(modules).toEqual(expect.arrayContaining(['fade.js', 'stall.js']));
     for (const name of modules) fs.writeFileSync(path.join(webRoot, name), '// module');
     const port = await start();
 
