@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Performance budgets: a separate budget for the tray after the window has been used (95 MB), checked by the soak test. A fresh tray keeps its 80 MB budget. Chromium keeps about 10 MB once it has drawn a window, and it does not grow.
 - Playlish's player now appears as "Playlish" in Spotify's device lists (was "Playlish (spike)").
 - Playlish no longer starts a test track by itself when the player is ready; press Play instead. The smoke test still does (`PLAYLISH_SMOKE_AUTOPLAY=1`).
 - The main window is built with Preact, bundled by esbuild into one script. Preact is internal to the main window: the playback host and plugins do not depend on it. Styles moved to `ui.css`, so the window's content security policy no longer allows inline styles.

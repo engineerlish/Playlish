@@ -58,7 +58,7 @@ Press Play to continue where your account left off, or pick something from the L
 
 ## Performance budgets
 
-Checked on every pull request and nightly (see `perf/budgets.json`): idle tray at most 80 MB and 0.1% CPU, window open at most 150 MB, usable window within 2.5 s, and no memory growth over a 30-minute soak.
+Checked on every pull request and nightly (see `perf/budgets.json`): idle tray at most 80 MB (95 MB once the window has been used) and 0.1% CPU, window open at most 150 MB, usable window within 2.5 s, and no memory growth over a 30-minute soak.
 
 ## Development
 

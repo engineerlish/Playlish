@@ -192,6 +192,11 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
       if (startup.uiMs !== null) checks.push(check('Cold start to usable UI', startup.uiMs, budgets.coldStartUiMs, 'ms'));
     }
     if (trend) checks.push(check('Soak memory growth after warm-up', trend.growthPercent, budgets.soakMaxGrowthPercent, '%'));
+    // The soak opens and closes the window all the time, so its window-closed samples are "the tray after use" (#34).
+    if (options.scenario === 'soak' && trayOnly.length >= 10) {
+      const avg = trayOnly.reduce((sum, s) => sum + s.privateMb, 0) / trayOnly.length;
+      checks.push(check('Tray RAM after the window was used (private, avg)', Math.round(avg * 10) / 10, budgets.trayAfterUiPrivateMb, 'MB'));
+    }
     if (!summary) checks.push({ name: 'Samples collected', value: 0, limit: 1, unit: '', pass: false });
     if (options.scenario === 'soak' && !trend) checks.push({ name: 'Enough soak samples for a trend', value: samples.length, limit: 10, unit: '', pass: false });
 

@@ -18,6 +18,8 @@ export interface PerfSample {
 /** Budgets from docs/PROPOSAL.md section 2 (perf/budgets.json). */
 export interface Budgets {
   idleTrayPrivateMb: number;
+  /** Tray only, after the window has been opened and closed (#34: Chromium keeps ~10 MB once it has drawn a window). */
+  trayAfterUiPrivateMb: number;
   uiOpenPrivateMb: number;
   idleCpuPercent: number;
   coldStartTrayMs: number;
