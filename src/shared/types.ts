@@ -82,6 +82,31 @@ export interface MetricsSample {
   cpuPercent: number;
 }
 
+/* ----- Spotify Connect devices (#44) ----- */
+
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  /** Spotify's device type, such as Computer, Smartphone or Speaker. */
+  type: string;
+  active: boolean;
+  /** Spotify does not allow controlling this device through the Web API. */
+  restricted: boolean;
+  /** Playlish's own player. */
+  isThisDevice: boolean;
+  /** 0..1, or null when unknown or not adjustable. */
+  volume: number | null;
+}
+
+export interface DevicesView {
+  /** Null until the list was loaded once. */
+  list: DeviceInfo[] | null;
+  loading: boolean;
+  /** Id of the device playback is being moved to. */
+  transferring: string | null;
+  error: string | null;
+}
+
 /* ----- first-run setup (#40) ----- */
 
 export type SetupStep = 'welcome' | 'create-app' | 'client-id' | 'login' | 'player-check' | 'done';
@@ -136,6 +161,7 @@ export interface Snapshot {
   deviceReady: boolean;
   /** What is playing here or on another device; null when nothing is known to be playing. */
   playback: NowPlaying | null;
+  devices: DevicesView;
   metrics: MetricsSample | null;
   perfLogPath: string;
   /** Set after a crash the user has not been asked about yet. */
@@ -172,6 +198,10 @@ export interface UiApi {
   requestSnapshot(): void;
   /** Remembers the page the user is on. */
   navigate(page: Page): void;
+  /** Loads the Spotify Connect device list (on demand; it is never polled). */
+  refreshDevices(): void;
+  /** Moves playback to a device from the list. */
+  transfer(deviceId: string): void;
   /** Sends an action to the first-run wizard. */
   setup(action: SetupAction): void;
   /** Signs out: deletes the stored session and stops the player. */

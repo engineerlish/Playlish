@@ -47,7 +47,7 @@ declare global {
 }
 
 // CHANGE HERE: name shown in the Spotify Connect device list.
-const DEVICE_NAME = 'Playlish (spike)';
+const DEVICE_NAME = 'Playlish';
 // CHANGE HERE: starting volume (0..1).
 const INITIAL_VOLUME = 0.5;
 // CHANGE HERE: how often playback progress is checked while playing (the timer does not run while paused).

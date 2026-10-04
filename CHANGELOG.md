@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Devices: a Devices page and a device button in the Now Playing bar list your Spotify Connect devices (this computer first, the one playing marked) and move playback to any of them without stopping it, and back. The list loads when you open it or press Refresh, never on a timer. The smoke test now checks moving playback away and back when a second device is online.
 - Now Playing bar: track, artists, play/pause, previous, next, seek, shuffle, repeat (off, album or playlist, track), mute and volume, plus the fade button. It also shows and controls music playing on another Spotify device ("Playing on Kitchen speaker"). While Playlish itself plays, everything comes from the player's own events; another device is checked every 5 seconds (30 when paused) only while the window is open and visible, so Playlish in the tray makes no requests. With nothing playing, Play continues where your account left off, on this computer.
 - End-to-end tests (`npm run e2e`): Playwright drives the real app against a fake Spotify and a stub of the Web Playback SDK, covering first-run setup, login and restart, main window states, Now Playing controls, the tray, and recovery from a crashed, stalled or failing player (21 tests). CI runs them on every pull request and keeps screenshots, logs and traces of failures. A test-only mode (`PLAYLISH_E2E=1`) points the app at the fake; it is refused in packaged builds and accepts only addresses on 127.0.0.1.
 - New main window: a sidebar with Library, Search, Queue, Devices, Settings and Plugins (Alt+1 to Alt+6, visible keyboard focus), a Now Playing bar with progress, controls and volume, and a Settings page with account, sign out, Client ID hint, diagnostics and resource use. Library, Search, Queue, Devices and Plugins are placeholders for now. The window reopens on the last page and where you left it; if that place is no longer on a screen it opens centered. A banner asks you to log in again when new Spotify permissions are needed.
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Playlish's player now appears as "Playlish" in Spotify's device lists (was "Playlish (spike)").
 - Playlish no longer starts a test track by itself when the player is ready; press Play instead. The smoke test still does (`PLAYLISH_SMOKE_AUTOPLAY=1`).
 - The main window is built with Preact, bundled by esbuild into one script. Preact is internal to the main window: the playback host and plugins do not depend on it. Styles moved to `ui.css`, so the window's content security policy no longer allows inline styles.
 - Playlish now asks for the Spotify permissions the library, playlists and queue need. A login from before this change keeps playing and is asked to log in again once to grant them.

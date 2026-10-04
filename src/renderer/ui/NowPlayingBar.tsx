@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { NowPlaying, RepeatMode, Snapshot, UiCommand } from '../../shared/types';
+import { DevicePicker } from './DevicePicker';
 import { Icon, type IconName } from './Icon';
 
 // CHANGE HERE: how often the progress bar redraws while playing (only while this window is open).
@@ -134,6 +135,7 @@ export function NowPlayingBar({ snapshot }: { snapshot: Snapshot }) {
       </div>
 
       <div class="volume">
+        <DevicePicker view={snapshot.devices} disabled={!snapshot.loggedIn} />
         <IconButton
           id="mute"
           icon={playback?.muted || volume === 0 ? 'muted' : 'volume'}
