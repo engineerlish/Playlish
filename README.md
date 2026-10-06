@@ -4,7 +4,7 @@ A lightweight desktop player for Spotify on Windows. Unofficial; not affiliated 
 
 Playlish plays your Spotify music through Spotify's own official Web Playback SDK and Web API, with your own free Spotify developer app. It aims to be small and steady: it sits in the tray at about 75 MB of memory and does nothing while idle.
 
-> Status: 0.1.0 in development. Everything below works from source; there is no installer yet.
+> Status: 0.1.0. Download it from [Releases](https://github.com/engineerlish/Playlish/releases), or run it from source (below).
 
 ## What it does
 
@@ -21,6 +21,14 @@ Playlish plays your Spotify music through Spotify's own official Web Playback SD
 - Windows 10 or 11.
 - **Spotify Premium** (the Web Playback SDK only plays for Premium accounts).
 - Your own Spotify app (free, takes a few minutes; the first-run wizard walks you through it). In Spotify's Development Mode an app works for up to 5 accounts, and its owner needs Premium.
+
+## Install
+
+1. Download `Playlish-Setup-0.1.0.exe` (or the portable zip) from [Releases](https://github.com/engineerlish/Playlish/releases) and check its SHA-256 against the release notes if you like (`Get-FileHash .\Playlish-Setup-0.1.0.exe`).
+2. Run it. It installs for your account only and needs no administrator rights. The installer is not code-signed yet, so Windows SmartScreen may say "Windows protected your PC": choose **More info**, then **Run anyway**.
+3. Follow the setup wizard (see step 5 below).
+
+Playlish checks once a day, while its window is open, whether a newer release exists and shows a link; you install updates yourself. Settings can turn the check off.
 
 ## Getting started (from source)
 

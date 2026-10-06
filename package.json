@@ -1,7 +1,7 @@
 {
   "name": "playlish",
   "productName": "Playlish",
-  "version": "0.0.1-spike",
+  "version": "0.1.0",
   "private": true,
   "description": "Lightweight, plugin-friendly Spotify desktop client (unofficial, not affiliated with Spotify)",
   "license": "Apache-2.0",
