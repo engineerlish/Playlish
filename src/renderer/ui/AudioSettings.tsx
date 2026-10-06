@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { outputNamesFrom } from '../../shared/outputs';
 
 /*
  * Settings → Audio (#89): choose the output device by name. The list follows devices being plugged in and out.
@@ -6,9 +7,7 @@ import { useEffect, useState } from 'preact/hooks';
 
 /** Output device names on this computer, without Windows' "default" and "communications" aliases. */
 async function outputNames(): Promise<string[]> {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const names = devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label !== '').map((d) => d.label);
-  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  return outputNamesFrom(await navigator.mediaDevices.enumerateDevices());
 }
 
 export function AudioSettings({ output }: { output: string | null }) {

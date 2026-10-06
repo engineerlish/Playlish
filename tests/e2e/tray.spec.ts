@@ -4,11 +4,27 @@ import type { ElectronApplication } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { TEST_CLIENT_ID, inHost, stubCommands, uiWindow, waitForPlayerReady, windowCounts } from './harness';
 
+type TrayItem =
+  | { kind: 'label'; label: string }
+  | { kind: 'separator' }
+  | { kind: 'action'; label: string; action: string; enabled: boolean }
+  | { kind: 'submenu'; label: string; items: TrayItem[] }
+  | { kind: 'output'; label: string; output: string | null; checked: boolean };
+
 interface TrayHooks {
   clickTray: () => void;
-  trayMenu: () => ({ kind: 'label'; label: string } | { kind: 'separator' } | { kind: 'action'; label: string; action: string; enabled: boolean })[];
+  trayMenu: () => TrayItem[];
   trayTooltip: () => string | null;
   clickTrayItem: (action: string) => void;
+  clickTrayOutput: (label: string) => void;
+}
+
+/** The "Play on" submenu as "label" or "label (checked)" lines, or null when the menu has none. */
+async function trayOutputs(app: ElectronApplication): Promise<string[] | null> {
+  const items = await app.evaluate(() => (globalThis as unknown as { __playlishE2E: TrayHooks }).__playlishE2E.trayMenu());
+  const menu = items.find((i) => i.kind === 'submenu' && i.label === 'Play on');
+  if (menu?.kind !== 'submenu') return null;
+  return menu.items.map((i) => (i.kind === 'output' && i.checked ? `${i.label} (checked)` : i.kind === 'separator' ? '---' : i.label));
 }
 
 /** The tray menu as "label" or "label (off)" lines, separators left out. */
@@ -76,13 +92,36 @@ test.describe('tray', () => {
     await waitForPlayerReady(app);
     await inHost(app, 'window.__stub.startPlaying()');
 
-    await expect.poll(() => trayLines(app)).toEqual(['▶ E2E Song One – E2E Artist', 'Pause', 'Next', 'Previous', 'Open Playlish', 'Quit']);
+    // The playback host has reported its outputs by now, so the menu also offers "Play on" (#89).
+    await expect.poll(() => trayLines(app)).toEqual(['▶ E2E Song One – E2E Artist', 'Pause', 'Next', 'Previous', 'Play on', 'Open Playlish', 'Quit']);
     expect(await app.evaluate(() => (globalThis as unknown as { __playlishE2E: TrayHooks }).__playlishE2E.trayTooltip())).toBe('Playlish – E2E Song One – E2E Artist');
 
     await app.evaluate(() => (globalThis as unknown as { __playlishE2E: TrayHooks }).__playlishE2E.clickTrayItem('next'));
     await expect.poll(async () => (await stubCommands(app)).map((c) => c.method)).toContain('nextTrack');
     await app.evaluate(() => (globalThis as unknown as { __playlishE2E: TrayHooks }).__playlishE2E.clickTrayItem('toggle'));
     await expect.poll(() => trayLines(app)).toContain('Play');
+  });
+
+  test('the tray menu chooses the output device (#89)', async ({ start }) => {
+    const { app, ui } = await start({ clientId: TEST_CLIENT_ID });
+    // No "Play on" before the playback host has said which outputs exist.
+    expect(await trayOutputs(app)).toBeNull();
+    await ui.click('#login');
+    await waitForPlayerReady(app);
+    await expect.poll(() => trayOutputs(app)).not.toBeNull();
+    // A known list in place of whatever this machine has, through the same bridge the host page uses.
+    await inHost(app, "window.host.outputs(['E2E Speakers', 'E2E Headphones'])");
+    await expect.poll(() => trayOutputs(app)).toEqual(['System default (checked)', 'E2E Headphones', 'E2E Speakers']);
+
+    await app.evaluate(() => (globalThis as unknown as { __playlishE2E: TrayHooks }).__playlishE2E.clickTrayOutput('E2E Headphones'));
+
+    await expect.poll(() => trayOutputs(app)).toEqual(['System default', 'E2E Headphones (checked)', 'E2E Speakers']);
+    await ui.click('#nav-settings');
+    await expect(ui.locator('#outputDevice')).toHaveValue('E2E Headphones');
+
+    // Unplugged: still shown as the choice, marked as not connected.
+    await inHost(app, "window.host.outputs(['E2E Speakers'])");
+    await expect.poll(() => trayOutputs(app)).toEqual(['System default', 'E2E Speakers', 'E2E Headphones (not connected) (checked)']);
   });
 
   test('with "keep running in the tray" off, closing the window quits', async ({ start }) => {

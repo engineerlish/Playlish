@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell } from 'electron';
+import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isPage } from '../shared/pages';
@@ -24,7 +24,8 @@ import { TokenStore } from './token-store';
 import { outputHookScript, type OutputHookResult } from './output-hook';
 import { parseUiCommand } from './ui-command';
 import { RELEASES_API, checkDue, fetchUpdate, type UpdateInfo } from './update-check';
-import { trayKey, trayMenu, trayTooltip, type TrayAction, type TrayItem } from './tray-menu';
+import { MAX_OUTPUT_NAME, validOutputNames } from '../shared/outputs';
+import { trayKey, trayMenu, trayTooltip, type TrayAction, type TrayItem, type TrayOutputs } from './tray-menu';
 import { startSoakDriver } from './soak-driver';
 import { SpotifyClient } from './spotify/client';
 import { SpotifyApiError, describeApiError } from './spotify/errors';
@@ -453,6 +454,14 @@ function applyOutputDevice(): void {
   }
 }
 
+/** Plays on the named output (null: the system default), from Settings → Audio or the tray menu (#89). */
+function setOutput(name: string | null): void {
+  settings?.update({ outputDevice: name });
+  applyOutputDevice();
+  restoreVolume();
+  pushSnapshot();
+}
+
 /** Sets this computer's player to the volume remembered for the current output, if there is one (#90). */
 function restoreVolume(): void {
   if (!settings || !hostWindow || hostWindow.isDestroyed()) return;
@@ -701,6 +710,15 @@ function registerIpc(): void {
     void nowPlaying.refresh();
   });
   ipcMain.on('host:state', (_event, state: PlaybackState | null) => onHostState(state));
+  ipcMain.on('host:outputs', (_event, names: unknown) => {
+    const valid = validOutputNames(names);
+    if (!valid) {
+      playerLog.warn('Ignored a malformed output list from the playback host', { code: 'HOST_OUTPUTS_INVALID' });
+      return;
+    }
+    outputNames = valid;
+    updateTray();
+  });
   ipcMain.on('host:error', (_event, kind: string, message: string) => {
     playerLog.error(`Player reported ${kind}: ${message}`, { code: `PLAYER_${kind.toUpperCase()}` });
     if (['account_error', 'authentication_error', 'initialization_error', 'sdk_load', 'connect'].includes(kind)) {
@@ -778,11 +796,8 @@ function registerIpc(): void {
     app.quit();
   });
   ipcMain.on('ui:set-output', (_event, name: unknown) => {
-    if (name !== null && (typeof name !== 'string' || name.length === 0 || name.length > 200)) return;
-    settings?.update({ outputDevice: name });
-    applyOutputDevice();
-    restoreVolume();
-    pushSnapshot();
+    if (name !== null && (typeof name !== 'string' || name.length === 0 || name.length > MAX_OUTPUT_NAME)) return;
+    setOutput(name);
   });
   ipcMain.on('ui:open-update', () => {
     // The address was checked when the release was read: only this project's release pages.
@@ -812,6 +827,26 @@ function createTray(): void {
 
 let trayShown = '';
 let trayItems: TrayItem[] = [];
+/** Output names last reported by the playback host (#89); null until it has reported, so the tray has no "Play on" yet. */
+let outputNames: string[] | null = null;
+
+/** Turns tray menu data into Electron menu entries (submenus included). */
+function trayTemplate(items: TrayItem[]): MenuItemConstructorOptions[] {
+  return items.map((item): MenuItemConstructorOptions => {
+    switch (item.kind) {
+      case 'separator':
+        return { type: 'separator' };
+      case 'label':
+        return { label: item.label, enabled: false };
+      case 'submenu':
+        return { label: item.label, submenu: trayTemplate(item.items) };
+      case 'output':
+        return { label: item.label, type: 'radio', checked: item.checked, click: () => setOutput(item.output) };
+      case 'action':
+        return { label: item.label, enabled: item.enabled, click: () => runTrayAction(item.action) };
+    }
+  });
+}
 
 /** Runs a tray menu entry. */
 function runTrayAction(action: TrayAction): void {
@@ -825,22 +860,13 @@ function updateTray(): void {
   if (!tray) return;
   const np = nowPlaying.view();
   const canPlay = deviceId !== null;
-  const key = trayKey(np, canPlay);
+  const outputs: TrayOutputs = { current: settings?.get().outputDevice ?? null, names: outputNames };
+  const key = trayKey(np, canPlay, outputs);
   if (key === trayShown) return;
   trayShown = key;
-  trayItems = trayMenu(np, canPlay);
+  trayItems = trayMenu(np, canPlay, outputs);
   tray.setToolTip(trayTooltip(np));
-  tray.setContextMenu(
-    Menu.buildFromTemplate(
-      trayItems.map((item) =>
-        item.kind === 'separator'
-          ? { type: 'separator' as const }
-          : item.kind === 'label'
-            ? { label: item.label, enabled: false }
-            : { label: item.label, enabled: item.enabled, click: () => runTrayAction(item.action) },
-      ),
-    ),
-  );
+  tray.setContextMenu(Menu.buildFromTemplate(trayTemplate(trayItems)));
 }
 
 /** App start-up: single instance, wait for the Widevine CDM, start the local server, tray, metrics and (optionally) the UI. */
@@ -884,6 +910,12 @@ async function main(): Promise<void> {
       trayMenu: () => trayItems,
       trayTooltip: () => (tray ? trayTooltip(nowPlaying.view()) : null),
       clickTrayItem: (action: TrayAction) => runTrayAction(action),
+      // Picks an entry of the "Play on" submenu by its label, as a click on it would.
+      clickTrayOutput: (label: string) => {
+        const choice = trayItems.flatMap((i) => (i.kind === 'submenu' ? i.items : [])).find((i) => i.kind === 'output' && i.label === label);
+        if (choice?.kind !== 'output') throw new Error(`No output "${label}" in the tray menu`);
+        setOutput(choice.output);
+      },
     };
   }
   // Only the refresh token is stored, encrypted with safeStorage (DPAPI); see token-store.ts and #51.

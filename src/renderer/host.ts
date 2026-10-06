@@ -216,6 +216,22 @@ function forwardPageErrors(report: (message: string, stack?: string) => void): v
 
 forwardPageErrors((message, stack) => window.host.reportError(message, stack));
 
+/**
+ * Tells the main process which outputs exist, for the tray menu's "Play on" list (#89). Same filter as outputNamesFrom
+ * in src/shared/outputs.ts; this page is not bundled and the server only serves its own files, so it is repeated here.
+ * The main process checks, sorts and de-duplicates what arrives.
+ */
+function reportOutputs(): void {
+  navigator.mediaDevices
+    .enumerateDevices()
+    .then((devices) =>
+      window.host.outputs(devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label !== '').map((d) => d.label)),
+    )
+    .catch((err: unknown) => window.host.log(`could not list output devices: ${String(err)}`));
+}
+reportOutputs();
+navigator.mediaDevices.addEventListener('devicechange', reportOutputs);
+
 // The SDK script calls this global once it has loaded; it must exist before the script is added.
 window.onSpotifyWebPlaybackSDKReady = startPlayer;
 const script = document.createElement('script');
