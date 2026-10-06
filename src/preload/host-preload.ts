@@ -9,6 +9,7 @@ const api: HostApi = {
   error: (kind, message) => ipcRenderer.send('host:error', kind, message),
   log: (message) => ipcRenderer.send('host:log', message),
   reportError: (message, stack) => ipcRenderer.send('renderer:error', 'host', message, stack),
+  outputs: (names) => ipcRenderer.send('host:outputs', names),
   onCommand: (callback) => {
     ipcRenderer.on('host:command', (_event, command: PlayerCommand) => callback(command));
   },

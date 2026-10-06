@@ -76,3 +76,43 @@ describe('trayTooltip and trayKey', () => {
     expect(clip('abcdef', 5)).toBe('abcd…');
   });
 });
+
+describe('the "Play on" submenu (#89)', () => {
+  const playOn = (items: ReturnType<typeof trayMenu>) => {
+    const menu = items.find((i) => i.kind === 'submenu');
+    return menu?.kind === 'submenu' ? menu.items.map((i) => (i.kind === 'output' ? `${i.label}${i.checked ? ' *' : ''}` : '?')) : null;
+  };
+
+  it('is left out until the playback host has reported its outputs', () => {
+    expect(playOn(trayMenu(null, true))).toBeNull();
+    expect(playOn(trayMenu(null, true, { current: null, names: null }))).toBeNull();
+  });
+
+  it('lists the system default first, then every output, with the choice checked', () => {
+    const items = trayMenu(null, true, { current: 'Headphones', names: ['Headphones', 'Speakers'] });
+
+    expect(labels(items).slice(-3)).toEqual(['Play on', 'Open Playlish', 'Quit']);
+    expect(playOn(items)).toEqual(['System default', 'Headphones *', 'Speakers']);
+    expect(playOn(trayMenu(null, true, { current: null, names: [] }))).toEqual(['System default *']);
+  });
+
+  it('keeps an unplugged choice in the list, marked as not connected', () => {
+    expect(playOn(trayMenu(null, true, { current: 'Headphones', names: ['Speakers'] }))).toEqual(['System default', 'Speakers', 'Headphones (not connected) *']);
+  });
+
+  it('carries the output name on each entry and shortens long labels', () => {
+    const long = 'z'.repeat(150);
+    const menu = trayMenu(null, true, { current: null, names: [long] }).find((i) => i.kind === 'submenu');
+    const entry = menu?.kind === 'submenu' ? menu.items[1] : undefined;
+
+    expect(entry).toMatchObject({ kind: 'output', output: long, checked: false });
+    expect(entry?.kind === 'output' && entry.label.length).toBe(MENU_LINE_MAX);
+  });
+
+  it('rebuilds the menu when the outputs or the choice change', () => {
+    const base = { current: null, names: ['Speakers'] };
+    expect(trayKey(null, true, base)).toBe(trayKey(null, true, { ...base }));
+    expect(trayKey(null, true, base)).not.toBe(trayKey(null, true, { ...base, names: ['Speakers', 'Headphones'] }));
+    expect(trayKey(null, true, base)).not.toBe(trayKey(null, true, { ...base, current: 'Speakers' }));
+  });
+});

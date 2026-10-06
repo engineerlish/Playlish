@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Volume per output device: each output (and the system default) keeps the volume you last set on it, restored when you switch back and when Playlish starts.
 - Output device: Settings → Audio chooses where Playlish plays (by device name; System default by default). The choice is remembered; if that device is unplugged, Playlish plays on the default until it is back. The smoke test checks switching when a second output device is connected.
+- Output device in the tray menu: "Play on" lists the system default and every output, so you can switch without opening the window.
 
 ## [0.1.0] - 2026-10-04
 

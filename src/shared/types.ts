@@ -279,6 +279,8 @@ export interface HostApi {
   log(message: string): void;
   /** Forwards an uncaught page error to the main process log. */
   reportError(message: string, stack?: string): void;
+  /** Output device names on this computer, for the tray menu (#89); sent at start and when devices change. */
+  outputs(names: string[]): void;
   onCommand(callback: (command: PlayerCommand) => void): void;
 }
 
