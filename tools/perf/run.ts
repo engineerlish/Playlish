@@ -4,9 +4,10 @@
  *
  *   node tools/perf/run.ts --scenario idle            tray only, nothing playing
  *   node tools/perf/run.ts --scenario ui              UI window open, nothing playing
- *   node tools/perf/run.ts --scenario soak --minutes 30
+ *   node tools/perf/run.ts --scenario soak --minutes 60 --warmup 0.5
  *
- * Options: --settle <s> (default 20), --measure <s> (default 60), --out <file.json>, --no-fail (report only).
+ * Options: --settle <s> (default 20), --measure <s> (default 60), --out <file.json>, --no-fail (report only),
+ * --warmup <fraction> (soak only: the share of the run left out of the growth trend, default 0.2).
  * Windows only (the budgets are about the Windows process tree). Needs `npm run build` and the Electron binary.
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -35,6 +36,8 @@ interface Options {
   settleSec: number;
   measureSec: number;
   soakMinutes: number;
+  /** Share of the soak's samples left out of the growth trend while native caches fill up. */
+  warmupFraction: number;
   out: string | null;
   fail: boolean;
 }
@@ -95,11 +98,14 @@ function parseArgs(argv: string[]): Options {
   };
   const scenario = (value('scenario') ?? 'idle') as Scenario;
   if (!['idle', 'ui', 'soak'].includes(scenario)) throw new Error(`Unknown scenario "${scenario}" (use idle, ui or soak)`);
+  const warmup = Number(value('warmup') ?? 0.2);
+  if (!(warmup >= 0 && warmup < 1)) throw new Error('--warmup must be a fraction from 0 up to (not including) 1');
   return {
     scenario,
     settleSec: Number(value('settle') ?? 20),
     measureSec: Number(value('measure') ?? 60),
     soakMinutes: Number(value('minutes') ?? 30),
+    warmupFraction: warmup,
     out: value('out') ?? null,
     fail: !argv.includes('--no-fail'),
   };
@@ -176,7 +182,7 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
     // During a soak the UI window opens and closes every few seconds and holds ~35 MB while open. Mixing both states
     // makes the trend depend on where samples happen to land, so compare like with like: UI-closed (tray) samples.
     const trayOnly = samples.filter((s) => s.uiOpen === false);
-    const trend = options.scenario === 'soak' ? memoryTrend(trayOnly.length >= 10 ? trayOnly : samples) : null;
+    const trend = options.scenario === 'soak' ? memoryTrend(trayOnly.length >= 10 ? trayOnly : samples, options.warmupFraction) : null;
     const trendScope = options.scenario === 'soak' ? (trayOnly.length >= 10 ? 'UI-closed samples' : 'all samples') : null;
     const startup = { trayMs: findMilestone(logText, 'STARTUP_TRAY'), uiMs: findMilestone(logText, 'STARTUP_UI'), wallClockMs };
 

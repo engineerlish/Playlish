@@ -72,9 +72,9 @@ jobs:
           retention-days: 30
 
   soak:
-    name: Soak test (30 minutes)
+    name: Soak test (60 minutes)
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v7
 
@@ -89,8 +89,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The main process's native memory grows for about the first 35 minutes of window open/close cycles and then
+      # levels off (measured 2026-10-06: 81 to 88 MB, then 88.4 to 88.8 MB over the last 23 minutes; the JS heap stays
+      # flat). A 30-minute run only sees the rise, so the growth trend is judged on the second half of a 60-minute run.
       - name: Soak
-        run: node tools/perf/run.ts --scenario soak --minutes 30 --out perf-soak.json
+        run: node tools/perf/run.ts --scenario soak --minutes 60 --warmup 0.5 --out perf-soak.json
 
       - name: Write report
         if: always()
