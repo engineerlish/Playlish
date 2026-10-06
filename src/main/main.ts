@@ -11,6 +11,7 @@ import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
+import { recallVolume, rememberVolume, volumeKey } from './device-volume';
 import { DevicesController } from './devices';
 import { LibraryService } from './library';
 import { NowPlayingController } from './now-playing';
@@ -452,6 +453,13 @@ function applyOutputDevice(): void {
   }
 }
 
+/** Sets this computer's player to the volume remembered for the current output, if there is one (#90). */
+function restoreVolume(): void {
+  if (!settings || !hostWindow || hostWindow.isDestroyed()) return;
+  const volume = recallVolume(settings.get().deviceVolumes, settings.get().outputDevice);
+  if (volume !== null) hostWindow.webContents.send('host:command', { type: 'volume', value: volume } satisfies PlayerCommand);
+}
+
 /** Rebuilds the playback host after a stall; gives up (with a clear message) if it keeps happening. */
 function restartHost(): void {
   if (stallRestarts.record()) {
@@ -682,6 +690,7 @@ function registerIpc(): void {
   });
   ipcMain.on('host:ready', (_event, id: string) => {
     deviceId = id;
+    restoreVolume();
     setStatus('Player ready.');
     resolvePlayerWaiters({ ok: true });
     if (AUTOPLAY_TEST_TRACK && !startedPlayback && !setup) {
@@ -751,7 +760,14 @@ function registerIpc(): void {
   });
   ipcMain.on('ui:command', (_event, input: unknown) => {
     const command = parseUiCommand(input);
-    if (command) void nowPlaying.command(command);
+    if (command) {
+      // A volume set for this computer's player is remembered for the current output (#90); another device's is not.
+      if (command.type === 'volume' && settings && nowPlaying.view()?.source !== 'elsewhere') {
+        const s = settings.get();
+        settings.update({ deviceVolumes: rememberVolume(s.deviceVolumes, volumeKey(s.outputDevice), command.value) });
+      }
+      void nowPlaying.command(command);
+    }
     else uiLog.warn('Ignored a malformed command from the window', { code: 'UI_COMMAND_INVALID' });
   });
   ipcMain.on('ui:devices-refresh', () => void devices.refresh());
@@ -765,6 +781,7 @@ function registerIpc(): void {
     if (name !== null && (typeof name !== 'string' || name.length === 0 || name.length > 200)) return;
     settings?.update({ outputDevice: name });
     applyOutputDevice();
+    restoreVolume();
     pushSnapshot();
   });
   ipcMain.on('ui:open-update', () => {

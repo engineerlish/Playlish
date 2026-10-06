@@ -45,3 +45,34 @@ test.describe('output device', () => {
     await expect(second.ui.locator('#outputMissing')).toHaveCount(0);
   });
 });
+
+test.describe('volume per output device (#90)', () => {
+  test('each output keeps its own volume, restored when switching and after a restart', async ({ start }) => {
+    const first = await start({ clientId: TEST_CLIENT_ID });
+    await first.ui.click('#login');
+    await waitForPlayerReady(first.app);
+    await inHost(first.app, 'window.__stub.startPlaying()');
+    const stubVolume = (app: typeof first.app) => inHost<number>(app, 'window.__stub.volume()');
+    const setOutput = (name: string | null) => first.ui.evaluate((n) => (window as unknown as { ui: { setOutput(n: string | null): void } }).ui.setOutput(n), name);
+
+    await first.ui.locator('#volume').fill('30');
+    await expect.poll(() => stubVolume(first.app)).toBeCloseTo(0.3, 5);
+    await setOutput(MISSING);
+    // A device with no remembered volume keeps the current one.
+    await first.ui.waitForTimeout(300);
+    expect(await stubVolume(first.app)).toBeCloseTo(0.3, 5);
+    await first.ui.locator('#volume').fill('80');
+    await expect.poll(() => stubVolume(first.app)).toBeCloseTo(0.8, 5);
+
+    await setOutput(null);
+    await expect.poll(() => stubVolume(first.app)).toBeCloseTo(0.3, 5);
+    await setOutput(MISSING);
+    await expect.poll(() => stubVolume(first.app)).toBeCloseTo(0.8, 5);
+    await first.app.close();
+
+    // After a restart the player starts at the volume remembered for the chosen output.
+    const second = await start({ clientId: TEST_CLIENT_ID, userDataDir: first.userDataDir });
+    await waitForPlayerReady(second.app);
+    await expect.poll(() => stubVolume(second.app)).toBeCloseTo(0.8, 5);
+  });
+});
