@@ -37,6 +37,8 @@ export interface Settings {
   checkForUpdates: boolean;
   /** When the last update check ran (epoch ms), or null. */
   lastUpdateCheck: number | null;
+  /** Name of the output device to play on (#89), or null for the system default. */
+  outputDevice: string | null;
   window: WindowState;
   lastPage: Page;
   /** Volume (0..1) remembered per audio output device id; used from 0.2.0. */
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   startMinimized: false,
   checkForUpdates: true,
   lastUpdateCheck: null,
+  outputDevice: null,
   window: Object.freeze({ width: 1100, height: 720, x: null, y: null, maximized: false }),
   lastPage: 'library',
   deviceVolumes: Object.freeze({}) as Record<string, number>,
@@ -70,6 +73,7 @@ export function isPreferenceKey(value: unknown): value is PreferenceKey {
 const MIN_WINDOW = 360;
 const MAX_WINDOW = 10_000;
 const MAX_DEVICE_VOLUMES = 100;
+const MAX_DEVICE_NAME = 200;
 // CHANGE HERE: how long to wait for more changes before writing.
 export const SAVE_DEBOUNCE_MS = 500;
 
@@ -121,6 +125,11 @@ export function validateSettings(input: unknown): { settings: Settings; problems
     if (raw[key] === undefined) continue;
     if (typeof raw[key] === 'boolean') settings[key] = raw[key];
     else bad(key);
+  }
+  if (raw['outputDevice'] !== undefined) {
+    const v = raw['outputDevice'];
+    if (v === null || (typeof v === 'string' && v.length > 0 && v.length <= MAX_DEVICE_NAME)) settings.outputDevice = v;
+    else bad('outputDevice');
   }
   if (raw['lastUpdateCheck'] !== undefined) {
     const v = raw['lastUpdateCheck'];

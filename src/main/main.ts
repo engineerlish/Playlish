@@ -20,6 +20,7 @@ import { SessionHolder } from './session-holder';
 import { SettingsStore, isPreferenceKey } from './settings';
 import { SetupController, type PlayerCheck } from './setup';
 import { TokenStore } from './token-store';
+import { outputHookScript, type OutputHookResult } from './output-hook';
 import { parseUiCommand } from './ui-command';
 import { RELEASES_API, checkDue, fetchUpdate, type UpdateInfo } from './update-check';
 import { trayKey, trayMenu, trayTooltip, type TrayAction, type TrayItem } from './tray-menu';
@@ -228,6 +229,7 @@ function snapshot(): Snapshot {
       checkForUpdates: settings?.get().checkForUpdates ?? true,
     },
     update: update && settings?.get().checkForUpdates ? { version: update.version } : null,
+    output: settings?.get().outputDevice ?? null,
     metrics: metrics?.getLatest() ?? null,
     perfLogPath: metrics?.csvPath ?? '',
     crashNotice: crashNotice ? { when: crashNotice.ts, process: crashNotice.process, kind: crashNotice.kind } : null,
@@ -418,6 +420,8 @@ function createHostWindow(): void {
   });
   hostWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   attachHostDiagnostics(hostWindow);
+  // Every frame that loads (the SDK's own iframe loads after this page) gets the chosen output device (#89).
+  hostWindow.webContents.on('did-frame-finish-load', () => applyOutputDevice());
   const win = hostWindow;
   win.on('closed', () => {
     // A restart creates the new window before this fires for the old one; only clear state that still belongs to it.
@@ -427,6 +431,25 @@ function createHostWindow(): void {
     onHostState(null);
   });
   void hostWindow.loadURL(`http://127.0.0.1:${serverPort}/host.html`);
+}
+
+/**
+ * Sends playback to the chosen output device (#89) in every frame of the playback host, including the SDK's
+ * cross-origin iframe where its audio element lives. Safe to call any number of times.
+ */
+function applyOutputDevice(): void {
+  if (!hostWindow || hostWindow.isDestroyed()) return;
+  const name = settings?.get().outputDevice ?? null;
+  for (const frame of hostWindow.webContents.mainFrame.framesInSubtree) {
+    frame
+      .executeJavaScript(outputHookScript(name))
+      .then((value: unknown) => {
+        const result = value as OutputHookResult;
+        if (result.status === 'missing') playerLog.warn('The chosen output device is not connected; playing on the default', { code: 'OUTPUT_DEVICE_MISSING' });
+        else playerLog.debug(`Output ${result.status}, ${result.moved} element(s) moved`, { code: 'OUTPUT_DEVICE', context: { status: result.status, moved: result.moved } });
+      })
+      .catch((err: unknown) => playerLog.warn('Could not set the output device in a frame', { code: 'OUTPUT_DEVICE_FAILED', error: err }));
+  }
 }
 
 /** Rebuilds the playback host after a stall; gives up (with a clear message) if it keeps happening. */
@@ -737,6 +760,12 @@ function registerIpc(): void {
     log.info(safe ? 'Restarting in safe mode' : 'Restarting normally', { code: 'RESTART' });
     app.relaunch({ args: relaunchArgs(process.argv, safe) });
     app.quit();
+  });
+  ipcMain.on('ui:set-output', (_event, name: unknown) => {
+    if (name !== null && (typeof name !== 'string' || name.length === 0 || name.length > 200)) return;
+    settings?.update({ outputDevice: name });
+    applyOutputDevice();
+    pushSnapshot();
   });
   ipcMain.on('ui:open-update', () => {
     // The address was checked when the release was read: only this project's release pages.

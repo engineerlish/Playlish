@@ -171,6 +171,9 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .row-head { display: flex; align-items: baseline; gap: 12px; }
 ol.plain { list-style: none; margin: 0; padding: 0; }
 
+.field { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.field select { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 260px; max-width: 100%; }
+
 /* First-run wizard. */
 .wizard { max-width: 640px; margin: 0 auto; padding: 24px 20px; }
 .wizard ol, .wizard ul { padding-left: 20px; }

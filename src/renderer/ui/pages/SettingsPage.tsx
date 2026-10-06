@@ -1,4 +1,5 @@
 import type { Snapshot } from '../../../shared/types';
+import { AudioSettings } from '../AudioSettings';
 
 type PreferenceKey = keyof Snapshot['preferences'];
 
@@ -40,6 +41,8 @@ export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
           )}
         </div>
       </section>
+
+      <AudioSettings output={snapshot.output} />
 
       <section class="card">
         <h2>Tray, start-up and updates</h2>
