@@ -24,11 +24,15 @@ function proc(workingSetKb: number, privateKb: number | undefined, cpu: number) 
 
 /** Creates a logger wired to the test context. */
 function makeLogger(csvPath = csv): MetricsLogger {
+  // The lists are taken now, not when a callback runs: a late append from an earlier test (whose folder is gone by
+  // then) must not report into this test's lists (#95).
+  const ownSamples = samples;
+  const ownErrors = errors;
   return new MetricsLogger(
     csvPath,
     () => context,
-    (s) => samples.push(s),
-    (e) => errors.push(e),
+    (s) => ownSamples.push(s),
+    (e) => ownErrors.push(e),
   );
 }
 
