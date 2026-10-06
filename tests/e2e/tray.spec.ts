@@ -107,7 +107,8 @@ test.describe('tray', () => {
     await app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()
         .find((w) => !w.isDestroyed() && w.webContents.getURL().endsWith('/ui.html'))
-        ?.minimize();
+        // The minimize event itself: the hidden desktop of a CI runner does not always minimize a window.
+        ?.emit('minimize');
     });
 
     await expect.poll(() => windowCounts(app)).toEqual({ all: 1, hosts: 1 });
