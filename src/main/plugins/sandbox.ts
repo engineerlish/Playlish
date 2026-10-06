@@ -1,4 +1,4 @@
-import { newQuickJSWASMModule, newVariant, RELEASE_SYNC, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime } from 'quickjs-emscripten';
+import { newQuickJSWASMModule, newVariant, RELEASE_SYNC, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime, type QuickJSWASMModule } from 'quickjs-emscripten';
 
 /*
  * One plugin's sandbox (#100): its own QuickJS engine compiled to WebAssembly, with hard limits.
@@ -12,7 +12,31 @@ import { newQuickJSWASMModule, newVariant, RELEASE_SYNC, type QuickJSContext, ty
  *   timers or host objects. Values cross the boundary as JSON only.
  *
  * After `maxViolations` limit violations the sandbox disables itself and refuses all further work.
+ *
+ * Sharing: one QuickJS engine instance costs at least 16 MB (its WebAssembly minimum), so the plugin-host process runs
+ * every plugin in one shared engine (`createEngine`), each in its own QuickJS runtime with its own soft memory limit,
+ * CPU budget and violation count. The hard WebAssembly ceiling then protects the plugin process as a whole: a plugin
+ * that hits it gets "out of memory", is disabled after repeated violations and freed, and the others keep running.
+ * Measured: 21 MB for the empty process, then about +17 MB per plugin with one engine each, which the shared engine
+ * avoids.
  */
+
+/** A QuickJS engine (WebAssembly instance) with a hard memory ceiling, shared by sandboxes. */
+export interface Engine {
+  module: QuickJSWASMModule;
+  memory: WebAssembly.Memory;
+}
+
+/** Bytes in a WebAssembly page. QuickJS needs at least 256 pages (16 MB). */
+const WASM_PAGE = 64 * 1024;
+const MIN_PAGES = 256;
+
+/** Creates an engine whose WebAssembly memory can never grow past `hardMemoryMb`. */
+export async function createEngine(hardMemoryMb: number): Promise<Engine> {
+  const memory = new WebAssembly.Memory({ initial: MIN_PAGES, maximum: Math.max(MIN_PAGES, Math.ceil((hardMemoryMb * 1024 * 1024) / WASM_PAGE)) });
+  const module = await newQuickJSWASMModule(newVariant(RELEASE_SYNC, { wasmMemory: memory }));
+  return { module, memory };
+}
 
 export interface SandboxLimits {
   /** QuickJS heap limit (MB). */
@@ -75,8 +99,12 @@ const PRELUDE = `
 })();
 `;
 
-/** Bytes in a WebAssembly page. */
-const WASM_PAGE = 64 * 1024;
+/** "Name: message" for an error thrown inside the sandbox (dumped to plain data). */
+function describeGuestError(dumped: unknown): string {
+  if (typeof dumped !== 'object' || dumped === null) return String(dumped);
+  const { name, message } = dumped as { name?: unknown; message?: unknown };
+  return `${typeof name === 'string' ? name : 'Error'}: ${typeof message === 'string' ? message : ''}`;
+}
 
 export class PluginSandbox {
   private violations: Violation[] = [];
@@ -92,10 +120,12 @@ export class PluginSandbox {
     private readonly now: () => number,
   ) {}
 
-  /** Creates a sandbox and runs the plugin's code once (it registers its handlers). */
-  static async create(code: string, host: SandboxHost, limits: SandboxLimits = DEFAULT_LIMITS, now: () => number = () => performance.now()): Promise<PluginSandbox> {
-    const memory = new WebAssembly.Memory({ initial: 256, maximum: Math.max(256, Math.ceil((limits.hardMemoryMb * 1024 * 1024) / WASM_PAGE)) });
-    const module = await newQuickJSWASMModule(newVariant(RELEASE_SYNC, { wasmMemory: memory }));
+  /**
+   * Creates a sandbox and runs the plugin's code once (it registers its handlers). Without an engine it gets its own,
+   * with `limits.hardMemoryMb` as the ceiling.
+   */
+  static async create(code: string, host: SandboxHost, limits: SandboxLimits = DEFAULT_LIMITS, now: () => number = () => performance.now(), engine?: Engine): Promise<PluginSandbox> {
+    const { module, memory } = engine ?? (await createEngine(limits.hardMemoryMb));
     const runtime = module.newRuntime();
     runtime.setMemoryLimit(limits.memoryMb * 1024 * 1024);
     runtime.setMaxStackSize(512 * 1024);
@@ -226,7 +256,7 @@ export class PluginSandbox {
     if (result.error) {
       const dumped: unknown = this.vm.dump(result.error);
       result.error.dispose();
-      const message = typeof dumped === 'object' && dumped !== null ? `${String((dumped as { name?: unknown }).name ?? 'Error')}: ${String((dumped as { message?: unknown }).message ?? '')}` : String(dumped);
+      const message = describeGuestError(dumped);
       this.violate(/interrupted/i.test(message) ? 'cpu' : /out of memory/i.test(message) ? 'memory' : 'error');
       throw new Error(message);
     }

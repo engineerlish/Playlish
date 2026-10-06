@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PluginSandbox, SandboxDisabledError, type SandboxHost, type SandboxLimits } from '../src/main/plugins/sandbox';
+import { PluginSandbox, SandboxDisabledError, createEngine, type SandboxHost, type SandboxLimits } from '../src/main/plugins/sandbox';
 
 /*
  * #11: the plugin sandbox. Every probe from the #82 plan is a test here.
@@ -144,5 +144,36 @@ describe('limits', () => {
     sandbox.dispose();
 
     expect(() => sandbox.dispatch('ok', null)).toThrow('disposed');
+  });
+});
+
+describe('one engine shared by several plugins (as in the plugin-host process)', () => {
+  it('keeps plugins in one engine apart', async () => {
+    const engine = await createEngine(64);
+    const a = recordingHost();
+    const b = recordingHost();
+    await PluginSandbox.create(`globalThis.secret = 'a'; playlish.on('x', () => playlish.call('mine', typeof secret));`, a.host, LIMITS, undefined, engine);
+    const sb = await PluginSandbox.create(`playlish.on('x', () => playlish.call('mine', typeof secret));`, b.host, LIMITS, undefined, engine);
+
+    sb.dispatch('x', null);
+
+    expect(b.calls).toEqual([{ action: 'mine', args: 'undefined' }]);
+  });
+
+  it('a plugin that exhausts the shared ceiling is stopped and freed; the others keep working', async () => {
+    const engine = await createEngine(48);
+    const bad = recordingHost();
+    const good = recordingHost();
+    const greedy = await PluginSandbox.create(`playlish.on('grow', () => { const a = []; for (;;) a.push('x'.repeat(1e5)); });`, bad.host, LIMITS, undefined, engine);
+    const calm = await PluginSandbox.create(`let n = 0; playlish.on('tick', () => playlish.call('count', ++n));`, good.host, LIMITS, undefined, engine);
+
+    for (let i = 0; i < LIMITS.maxViolations; i++) expect(() => greedy.dispatch('grow', null)).toThrow();
+    expect(greedy.isDisabled()).toBe(true);
+    greedy.dispose();
+
+    calm.dispatch('tick', null);
+    calm.dispatch('tick', null);
+    expect(good.calls.map((c) => c.args)).toEqual([1, 2]);
+    expect(engine.memory.buffer.byteLength).toBeLessThanOrEqual(48 * 1024 * 1024);
   });
 });
