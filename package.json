@@ -40,6 +40,7 @@
     "vitest": "^5.0.3"
   },
   "dependencies": {
-    "preact": "^11.0.0"
+    "preact": "^11.0.0",
+    "quickjs-emscripten": "^0.32.0"
   }
 }
