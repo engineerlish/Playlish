@@ -156,11 +156,14 @@ describe('RotatingFileSink', () => {
     const file = path.join(dir, 'playlish.log');
     const sink = new RotatingFileSink(file, 1000, 3);
 
-    for (let i = 0; i < 2000; i++) sink.write(`line ${i} ${'x'.repeat(40)}`);
+    // About 30 rotations: enough to prove the cap, few enough file operations to stay fast under a busy suite (2,000
+    // writes sometimes took over 5 s on Windows).
+    for (let i = 0; i < 600; i++) sink.write(`line ${i} ${'x'.repeat(40)}`);
 
     const total = sink.files().reduce((sum, f) => sum + fs.statSync(f).size, 0);
     expect(total).toBeLessThanOrEqual(3000);
-  });
+    expect(sink.files()).toHaveLength(3);
+  }, 20_000);
 
   it('continues an existing file and counts its size', () => {
     const file = path.join(dir, 'playlish.log');
