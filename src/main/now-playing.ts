@@ -21,7 +21,7 @@ export const POLL_IDLE_MS = 30_000;
 export const REFRESH_AFTER_COMMAND_MS = 600;
 // CHANGE HERE: checks of the Web API after Playlish moved playback to another device (ms after the move). Spotify takes
 // a moment to report the new device, so one check right away is often too early.
-export const CHECKS_AFTER_MOVE_MS = [0, 1_500, 4_000] as const;
+export const CHECKS_AFTER_MOVE_MS = [0, 1_000, 2_000, 3_500, 6_000, 10_000] as const;
 // CHANGE HERE: volume restored when unmuting another device whose volume before muting is unknown.
 export const DEFAULT_UNMUTE_VOLUME = 0.5;
 
@@ -111,6 +111,8 @@ export interface NowPlayingDeps {
   onChange(): void;
   /** Called when a Web API call failed (shown to the user by the caller). */
   onError(error: unknown): void;
+  /** Diagnostic lines about moves between devices (#44), for the app log. */
+  log?: (message: string, context: Record<string, unknown>) => void;
   now?: () => number;
 }
 
@@ -125,10 +127,13 @@ export class NowPlayingController {
   private mutedVolume: number | null = null;
   private stopped = false;
   /**
-   * Set when Playlish moved playback to another device. The SDK can keep reporting this player's last (paused) state
-   * after that, which must not hide where the music went; only a playing state means it is back here.
+   * Set when Playlish moved playback to another device. The SDK keeps reporting states after that (paused, or even
+   * playing, smoke tests 2026-10-08), so it cannot say where the music is. Until the Web API reports this computer as
+   * the active device again (or Playlish moves playback back here), SDK states are held instead of shown.
    */
   private movedAway = false;
+  /** The SDK's latest state while moved away, shown once playback is back here. */
+  private heldHere: PlaybackState | null = null;
   private readonly checks = new Set<ReturnType<typeof setTimeout>>();
   private readonly now: () => number;
 
@@ -155,10 +160,11 @@ export class NowPlayingController {
   /** New state from the SDK (null when playback moved to another device or the host went away). */
   setHere(state: PlaybackState | null): void {
     if (this.movedAway) {
-      // Only real playback brings the bar back to this player.
-      if (!state || state.paused) return;
-      this.movedAway = false;
-      this.clearChecks();
+      this.heldHere = state;
+      // Playing could mean it is back here (moved from another app), or just the SDK describing the other device:
+      // only the Web API can tell.
+      if (state && !state.paused) void this.poll();
+      return;
     }
     const wasHere = this.here !== null;
     this.here = state;
@@ -178,7 +184,9 @@ export class NowPlayingController {
    */
   moveAway(): void {
     this.movedAway = true;
+    this.heldHere = this.here;
     this.here = null;
+    this.deps.log?.('Playback moved to another device; following it through the Web API', { checks: CHECKS_AFTER_MOVE_MS.length });
     this.deps.onChange();
     this.clearChecks();
     for (const delay of CHECKS_AFTER_MOVE_MS) {
@@ -192,9 +200,17 @@ export class NowPlayingController {
 
   /** Playlish moved playback back to this computer: its SDK state counts again, even when paused. */
   moveHere(): void {
-    this.movedAway = false;
-    this.clearChecks();
+    this.endMoveAway();
     void this.refresh();
+  }
+
+  /** Back to normal: SDK states are shown again, starting with the one held while moved away. */
+  private endMoveAway(): void {
+    const held = this.heldHere;
+    this.movedAway = false;
+    this.heldHere = null;
+    this.clearChecks();
+    if (held) this.setHere(held);
   }
 
   /** The window became visible or hidden (or the login changed); starts or stops polling accordingly. */
@@ -209,6 +225,7 @@ export class NowPlayingController {
     this.cancel();
     this.clearChecks();
     this.movedAway = false;
+    this.heldHere = null;
     this.here = null;
     this.elsewhere = null;
     this.elsewhereDeviceId = null;
@@ -239,6 +256,18 @@ export class NowPlayingController {
     try {
       const state = await api.playbackState('visible');
       if (this.here) return; // the SDK took over meanwhile
+      if (this.movedAway) {
+        const own = this.deps.ownDeviceId();
+        const active = !state ? 'none' : own !== null && state.device.id === own ? 'this' : 'other';
+        this.deps.log?.('Checked where playback is after a move', { active, playing: state?.is_playing ?? false });
+        if (active === 'this') {
+          this.elsewhere = null;
+          this.elsewhereDeviceId = null;
+          this.endMoveAway();
+          this.deps.onChange();
+          return;
+        }
+      }
       this.elsewhereDeviceId = state && state.device.id !== this.deps.ownDeviceId() ? state.device.id : null;
       this.elsewhere = fromWebApi(state, this.deps.ownDeviceId(), this.now(), this.mutedVolume);
       if (!this.elsewhere) this.mutedVolume = null;

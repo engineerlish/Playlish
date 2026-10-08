@@ -87,10 +87,14 @@ test.describe('devices', () => {
     await ui.click('#nav-devices');
 
     await ui.click('#device-kitchen');
-    // What the real SDK does when another device takes over: this player reports itself paused, not gone (smoke test,
-    // 2026-10-08).
+    // What the real SDK may do when another device takes over: it reports this player paused, not gone, and can go on
+    // reporting the playback (now on the other device) as playing (smoke tests, 2026-10-08).
     await inHost(app, "window.__stub.emit('player_state_changed', { ...window.__stub.state(), paused: true })");
+    await expect(ui.locator('#device')).toHaveText(/Playing on Kitchen speaker/);
+    await inHost(app, "window.__stub.emit('player_state_changed', { ...window.__stub.state(), paused: false })");
 
+    // Spotify still names the kitchen speaker, so the bar does too.
+    await expect.poll(() => fake.requestsFor('GET', '/v1/me/player').length).toBeGreaterThan(2);
     await expect(ui.locator('#device')).toHaveText(/Playing on Kitchen speaker/);
   });
 

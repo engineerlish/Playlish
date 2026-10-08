@@ -120,6 +120,30 @@ async function waitForLog(offset: number, pattern: RegExp, timeoutMs: number): P
   return null;
 }
 
+// CHANGE HERE: how many log lines a failed step copies into the report.
+const LOG_HINT_LINES = 12;
+
+/**
+ * App log lines since `offset` that carry one of `codes` or mention `text`, shortened, for a failed step's details.
+ * Read here, where the smoke test runs, because the log is the only record of what the app saw (tokens are already
+ * redacted by the app's logger).
+ */
+function logHints(offset: number, codes: string[], text: string[] = []): string {
+  const lines = logSince(offset)
+    .map((l) => {
+      try {
+        return JSON.parse(l) as { ts?: string; code?: string; msg?: string; context?: unknown };
+      } catch {
+        return null;
+      }
+    })
+    .filter((e): e is { ts?: string; code?: string; msg?: string; context?: unknown } => e !== null)
+    .filter((e) => (e.code !== undefined && codes.includes(e.code)) || text.some((t) => e.msg?.includes(t)))
+    .slice(-LOG_HINT_LINES)
+    .map((e) => `${e.ts?.slice(11, 19) ?? ''} ${e.code ?? ''} ${e.msg ?? ''}${e.context ? ` ${JSON.stringify(e.context)}` : ''}`.slice(0, 240));
+  return lines.length > 0 ? ` | log: ${lines.join(' ; ')}` : ' | log: nothing relevant';
+}
+
 /** Measures a few times and returns the highest peak (music has quiet moments). */
 function bestOf(times: number, ms: number): number {
   let best = 0;
@@ -337,17 +361,21 @@ async function checkOutputDevice(): Promise<void> {
     return;
   }
   const setOutput = (device: string | null) => evaluate(DEVTOOLS_PORT, '/ui.html', `window.ui.setOutput(${JSON.stringify(device)}), true`);
+  const logOffset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
   await setOutput(choice.other);
   await sleep(3000);
   const onOther = meter(1500);
   await setOutput(null);
   await sleep(3000);
   const back = bestOf(2, 2000);
+  const passed = onOther < SILENCE && back > SOUND;
   record({
     id: 'output-device',
     name,
-    status: onOther < SILENCE && back > SOUND ? 'pass' : 'fail',
-    details: `on "${choice.other}": peak on the default device (${choice.defaultName}) ${onOther}; back on the default: peak ${back}`,
+    status: passed ? 'pass' : 'fail',
+    details:
+      `on "${choice.other}": peak on the default device (${choice.defaultName}) ${onOther}; back on the default: peak ${back}` +
+      (passed ? '' : logHints(logOffset, ['OUTPUT_DEVICE', 'OUTPUT_DEVICE_MISSING', 'OUTPUT_DEVICE_FAILED', 'MEDIA_CAPTURE_DENIED'], ['iframe was added'])),
     area: 'audio',
     severity: 'medium',
   });
@@ -420,10 +448,15 @@ async function checkTransfer(): Promise<void> {
   }
   const local = samePc(other);
   const deviceLabel = () => evaluate(DEVTOOLS_PORT, '/ui.html', `document.getElementById('device')?.textContent ?? ''`) as Promise<string>;
+  const logOffset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
   await click(DEVTOOLS_PORT, other.id);
-  await sleep(4000);
+  // Spotify takes a moment to report the new device; wait for the bar to name it (up to 10 s).
+  let shownAway = '';
+  for (let waited = 0; waited < 10_000 && !shownAway.includes(other.name); waited += 500) {
+    await sleep(500);
+    shownAway = (await deviceLabel()) ?? '';
+  }
   const away = meter(1500);
-  const shownAway = await deviceLabel();
   await click(DEVTOOLS_PORT, 'devicePicker');
   await sleep(2500);
   await click(DEVTOOLS_PORT, 'pick-this');
@@ -436,9 +469,11 @@ async function checkTransfer(): Promise<void> {
     id: 'transfer',
     name,
     status: movedAway && movedBack ? 'pass' : 'fail',
-    details: local
-      ? `moved to "${other.name}" on this computer (same speakers, so checked what Playlish shows): "${shownAway || 'nothing'}"; moved back: peak ${backHere}`
-      : `moved to "${other.name}": peak here ${away}; moved back: peak ${backHere}`,
+    details:
+      (local
+        ? `moved to "${other.name}" on this computer (same speakers, so checked what Playlish shows): "${shownAway || 'nothing'}"; moved back: peak ${backHere}`
+        : `moved to "${other.name}": peak here ${away}; moved back: peak ${backHere}`) +
+      (movedAway && movedBack ? '' : logHints(logOffset, ['NOW_PLAYING_MOVE', 'NOW_PLAYING_API', 'DEVICES_API', 'HTTP_ERROR'])),
     area: 'player',
     severity: 'medium',
   });

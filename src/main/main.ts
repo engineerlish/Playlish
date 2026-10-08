@@ -524,6 +524,7 @@ const nowPlaying = new NowPlayingController({
   ownDeviceId: () => deviceId,
   loggedIn: () => auth?.isLoggedIn() ?? false,
   onChange: () => pushSnapshot(),
+  log: (message, context) => playerLog.info(message, { code: 'NOW_PLAYING_MOVE', context }),
   onError: (err) => {
     playerLog.warn('Playback command or check failed', {
       code: 'NOW_PLAYING_API',
