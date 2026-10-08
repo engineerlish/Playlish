@@ -1,7 +1,7 @@
 {
-  "$comment": "Budgets from docs/PROPOSAL.md section 2. Memory is private bytes summed over all app processes. uiOpenPrivateMb is the UI window open while not playing (the proposal's 300 MB is for open and playing). trayAfterUiPrivateMb is the tray after the window has been used, checked on the soak's window-closed samples: Chromium keeps about 10 MB of native memory once it has drawn a window (#34, approved 2026-10-04).",
+  "$comment": "Budgets from docs/PROPOSAL.md section 2. Memory is private bytes summed over all app processes. uiOpenPrivateMb is the UI window open while not playing (the proposal's 300 MB is for open and playing). trayAfterUiPrivateMb is the tray after the window has been used, checked on the soak's window-closed samples: Chromium keeps about 10 MB of native memory once it has drawn a window (#34, approved 2026-10-04), and the main process's native memory grows for about 35 minutes of window open/close cycles before it levels off at about 100 MB (raised from 95 to 105 MB, #108, approved 2026-10-08).",
   "idleTrayPrivateMb": 80,
-  "trayAfterUiPrivateMb": 95,
+  "trayAfterUiPrivateMb": 105,
   "uiOpenPrivateMb": 150,
   "idleCpuPercent": 0.1,
   "coldStartTrayMs": 1500,
