@@ -42,7 +42,7 @@ export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
-      <AudioSettings output={snapshot.output} />
+      <AudioSettings output={snapshot.output} eq={snapshot.eq} />
 
       <section class="card">
         <h2>Tray, start-up and updates</h2>

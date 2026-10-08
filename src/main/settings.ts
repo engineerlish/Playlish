@@ -39,6 +39,8 @@ export interface Settings {
   lastUpdateCheck: number | null;
   /** Name of the output device to play on (#89), or null for the system default. */
   outputDevice: string | null;
+  /** The Equalizer APO integration (#91): off by default. */
+  eq: { enabled: boolean; preset: EqPreset; custom: number[] };
   window: WindowState;
   lastPage: Page;
   /** Volume (0..1) remembered per audio output device id; used from 0.2.0. */
@@ -55,10 +57,15 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   checkForUpdates: true,
   lastUpdateCheck: null,
   outputDevice: null,
+  eq: Object.freeze({ enabled: false, preset: 'flat', custom: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }),
   window: Object.freeze({ width: 1100, height: 720, x: null, y: null, maximized: false }),
   lastPage: 'library',
   deviceVolumes: Object.freeze({}) as Record<string, number>,
 });
+
+/** Equalizer presets (#91); the gains are in src/main/eq/config.ts. */
+export const EQ_PRESETS = ['flat', 'bassBoost', 'bassCut', 'vocal', 'trebleBoost', 'custom'] as const;
+export type EqPreset = (typeof EQ_PRESETS)[number];
 
 /** On/off settings the user changes on the Settings page. */
 export const PREFERENCE_KEYS = ['closeToTray', 'minimizeToTray', 'startMinimized', 'checkForUpdates'] as const;
@@ -79,7 +86,7 @@ export const SAVE_DEBOUNCE_MS = 500;
 
 /** A fresh, mutable copy of the defaults. */
 export function defaultSettings(): Settings {
-  return { ...DEFAULT_SETTINGS, window: { ...DEFAULT_SETTINGS.window }, deviceVolumes: {} };
+  return { ...DEFAULT_SETTINGS, window: { ...DEFAULT_SETTINGS.window }, deviceVolumes: {}, eq: { ...DEFAULT_SETTINGS.eq, custom: [...DEFAULT_SETTINGS.eq.custom] } };
 }
 
 /** True for a plain object (not null, not an array). */
@@ -125,6 +132,20 @@ export function validateSettings(input: unknown): { settings: Settings; problems
     if (raw[key] === undefined) continue;
     if (typeof raw[key] === 'boolean') settings[key] = raw[key];
     else bad(key);
+  }
+  if (raw['eq'] !== undefined) {
+    const e = raw['eq'];
+    if (
+      isObject(e) &&
+      typeof e['enabled'] === 'boolean' &&
+      typeof e['preset'] === 'string' &&
+      (EQ_PRESETS as readonly string[]).includes(e['preset']) &&
+      Array.isArray(e['custom']) &&
+      e['custom'].length === 10 &&
+      e['custom'].every((g) => typeof g === 'number' && Number.isFinite(g) && Math.abs(g) <= 12)
+    ) {
+      settings.eq = { enabled: e['enabled'], preset: e['preset'] as EqPreset, custom: [...(e['custom'] as number[])] };
+    } else bad('eq');
   }
   if (raw['outputDevice'] !== undefined) {
     const v = raw['outputDevice'];

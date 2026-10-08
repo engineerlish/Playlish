@@ -18,6 +18,8 @@ export interface E2eConfig {
   port: number;
   /** JavaScript file served in place of https://sdk.scdn.co/spotify-player.js. */
   sdkStubFile: string;
+  /** A fake Equalizer APO config folder (PLAYLISH_E2E_EQ_DIR), or null for "not installed" (#91). */
+  eqConfigDir: string | null;
 }
 
 /** True for an http URL on 127.0.0.1 with an explicit port and no path, query or credentials. */
@@ -56,7 +58,8 @@ export function readE2eConfig(env: Record<string, string | undefined>, isPackage
   const port = Number(portText);
   if (!/^\d+$/.test(portText) || port < 1024 || port > 65535) throw new Error('PLAYLISH_E2E_PORT must be a port number from 1024 to 65535.');
   if (!sdkStubFile.endsWith('.js') || !fileExists(sdkStubFile)) throw new Error('PLAYLISH_E2E_SDK_STUB must name an existing .js file.');
-  return { accountsBase, apiBase, port, sdkStubFile };
+  const eqDir = env['PLAYLISH_E2E_EQ_DIR'];
+  return { accountsBase, apiBase, port, sdkStubFile, eqConfigDir: eqDir && fileExists(eqDir) ? eqDir : null };
 }
 
 /** The address the stub replaces. */
