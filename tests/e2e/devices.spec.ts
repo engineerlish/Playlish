@@ -64,6 +64,36 @@ test.describe('devices', () => {
     await expect(ui.locator('#device-kitchen')).toContainText('Playing here');
   });
 
+  test('after moving playback away, the bar names the other device even while the player reports a pause', async ({ start, fake }) => {
+    scriptDevices(fake);
+    const { app, ui } = await start({ clientId: TEST_CLIENT_ID });
+    await ui.click('#login');
+    await waitForPlayerReady(app);
+    await inHost(app, 'window.__stub.startPlaying()');
+    await expect(ui.locator('#toggle')).toHaveAttribute('aria-label', 'Pause');
+    // Spotify reports the new device only after a moment: first nothing, then the kitchen speaker.
+    const kitchen = {
+      device: { id: 'kitchen', name: 'Kitchen speaker', type: 'Speaker', is_active: true, is_restricted: false, is_private_session: false, volume_percent: 40, supports_volume: true },
+      repeat_state: 'off',
+      shuffle_state: false,
+      context: null,
+      timestamp: 0,
+      progress_ms: 1_000,
+      is_playing: true,
+      currently_playing_type: 'track',
+      item: { type: 'track', id: 'k1', name: 'E2E Song One', uri: 'spotify:track:k1', duration_ms: 240_000, explicit: false, artists: [{ id: 'a', name: 'E2E Artist', uri: 'spotify:artist:a' }], album: { id: 'al', name: 'Album', uri: 'spotify:album:al', artists: [], images: [] } },
+    };
+    fake.on('GET', '/v1/me/player', { status: 204 }, { status: 200, body: kitchen });
+    await ui.click('#nav-devices');
+
+    await ui.click('#device-kitchen');
+    // What the real SDK does when another device takes over: this player reports itself paused, not gone (smoke test,
+    // 2026-10-08).
+    await inHost(app, "window.__stub.emit('player_state_changed', { ...window.__stub.state(), paused: true })");
+
+    await expect(ui.locator('#device')).toHaveText(/Playing on Kitchen speaker/);
+  });
+
   test('the bar picker brings playback back to this computer', async ({ start, fake }) => {
     scriptDevices(fake, 'kitchen');
     const { app, ui } = await start({ clientId: TEST_CLIENT_ID });

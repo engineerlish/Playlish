@@ -19,6 +19,9 @@ export const POLL_PLAYING_MS = 5_000;
 export const POLL_IDLE_MS = 30_000;
 // CHANGE HERE: how soon to re-check another device after sending it a command (Spotify needs a moment to apply it).
 export const REFRESH_AFTER_COMMAND_MS = 600;
+// CHANGE HERE: checks of the Web API after Playlish moved playback to another device (ms after the move). Spotify takes
+// a moment to report the new device, so one check right away is often too early.
+export const CHECKS_AFTER_MOVE_MS = [0, 1_500, 4_000] as const;
 // CHANGE HERE: volume restored when unmuting another device whose volume before muting is unknown.
 export const DEFAULT_UNMUTE_VOLUME = 0.5;
 
@@ -121,6 +124,12 @@ export class NowPlayingController {
   /** Volume (0..1) another device had before Playlish muted it. */
   private mutedVolume: number | null = null;
   private stopped = false;
+  /**
+   * Set when Playlish moved playback to another device. The SDK can keep reporting this player's last (paused) state
+   * after that, which must not hide where the music went; only a playing state means it is back here.
+   */
+  private movedAway = false;
+  private readonly checks = new Set<ReturnType<typeof setTimeout>>();
   private readonly now: () => number;
 
   constructor(private readonly deps: NowPlayingDeps) {
@@ -145,6 +154,12 @@ export class NowPlayingController {
 
   /** New state from the SDK (null when playback moved to another device or the host went away). */
   setHere(state: PlaybackState | null): void {
+    if (this.movedAway) {
+      // Only real playback brings the bar back to this player.
+      if (!state || state.paused) return;
+      this.movedAway = false;
+      this.clearChecks();
+    }
     const wasHere = this.here !== null;
     this.here = state;
     if (state) {
@@ -157,6 +172,31 @@ export class NowPlayingController {
     else if (state) this.cancel();
   }
 
+  /**
+   * Playlish moved playback to another device (#44). This player stops being the source of the bar at once, and the
+   * Web API is checked a few times, so the bar shows the other device as soon as Spotify reports it.
+   */
+  moveAway(): void {
+    this.movedAway = true;
+    this.here = null;
+    this.deps.onChange();
+    this.clearChecks();
+    for (const delay of CHECKS_AFTER_MOVE_MS) {
+      const handle = setTimeout(() => {
+        this.checks.delete(handle);
+        if (!this.stopped) void this.refresh();
+      }, delay);
+      this.checks.add(handle);
+    }
+  }
+
+  /** Playlish moved playback back to this computer: its SDK state counts again, even when paused. */
+  moveHere(): void {
+    this.movedAway = false;
+    this.clearChecks();
+    void this.refresh();
+  }
+
   /** The window became visible or hidden (or the login changed); starts or stops polling accordingly. */
   setVisible(visible: boolean): void {
     this.visible = visible;
@@ -167,6 +207,8 @@ export class NowPlayingController {
   /** Forgets everything (sign-out). */
   reset(): void {
     this.cancel();
+    this.clearChecks();
+    this.movedAway = false;
     this.here = null;
     this.elsewhere = null;
     this.elsewhereDeviceId = null;
@@ -178,6 +220,7 @@ export class NowPlayingController {
   stop(): void {
     this.stopped = true;
     this.cancel();
+    this.clearChecks();
   }
 
   /**
@@ -317,5 +360,11 @@ export class NowPlayingController {
   private cancel(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+  }
+
+  /** Drops the pending checks after a move. */
+  private clearChecks(): void {
+    for (const handle of this.checks) clearTimeout(handle);
+    this.checks.clear();
   }
 }

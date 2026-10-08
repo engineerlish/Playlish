@@ -544,7 +544,7 @@ const devices = new DevicesController({
     return now !== null && !now.paused;
   },
   onChange: () => pushSnapshot(),
-  afterTransfer: () => void nowPlaying.refresh(),
+  afterTransfer: (id) => (id === deviceId ? nowPlaying.moveHere() : nowPlaying.moveAway()),
   onError: (err) => {
     playerLog.warn('Device list or transfer failed', {
       code: 'DEVICES_API',
