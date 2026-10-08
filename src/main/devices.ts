@@ -47,8 +47,8 @@ export interface DevicesDeps {
   /** Whether something is playing right now (a transfer keeps it playing). */
   isPlaying(): boolean;
   onChange(): void;
-  /** Called after a transfer went through, so Now Playing can look again. */
-  afterTransfer(): void;
+  /** Called after a transfer to `deviceId` went through, so Now Playing can follow it. */
+  afterTransfer(deviceId: string): void;
   onError(error: unknown): void;
 }
 
@@ -103,7 +103,7 @@ export class DevicesController {
       this.error = null;
       // Show the new active device at once; the refresh below confirms it.
       this.devices = (this.devices ?? []).map((d) => ({ ...d, is_active: d.id === deviceId }));
-      this.deps.afterTransfer();
+      this.deps.afterTransfer(deviceId);
     } catch (err) {
       this.error = 'Could not move playback to that device.';
       this.deps.onError(err);

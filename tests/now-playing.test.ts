@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CHECKS_AFTER_MOVE_MS,
   DEFAULT_UNMUTE_VOLUME,
   NowPlayingController,
   POLL_IDLE_MS,
@@ -419,6 +420,76 @@ describe('NowPlayingController', () => {
     c.reset();
     expect(c.view()).toBeNull();
     expect(changes).toBeGreaterThan(0);
+  });
+
+  it('after moving playback away, shows the other device even while the SDK still reports its paused state', async () => {
+    const c = controller();
+    c.setVisible(true);
+    c.setHere(sdkState());
+    // Spotify does not report the new device at once.
+    api.playbackState.mockResolvedValueOnce(null);
+
+    c.moveAway();
+    expect(c.view()).toBeNull();
+    c.setHere(sdkState({ paused: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.view()).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[1]);
+    expect(c.view()).toMatchObject({ source: 'elsewhere', deviceName: 'Kitchen speaker' });
+    // A late paused state from the SDK changes nothing.
+    c.setHere(sdkState({ paused: true }));
+    expect(c.view()?.source).toBe('elsewhere');
+  });
+
+  it('after moving playback away, a playing SDK state means the music is back here', async () => {
+    const c = controller();
+    c.moveAway();
+    await vi.advanceTimersByTimeAsync(0);
+
+    c.setHere(sdkState({ paused: false }));
+    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[2]);
+
+    expect(c.view()).toMatchObject({ source: 'here', track: 'Here Song' });
+    // The remaining checks after the move were dropped.
+    expect(api.playbackState).toHaveBeenCalledTimes(1);
+  });
+
+  it('moving playback back here lets a paused SDK state count again', async () => {
+    const c = controller();
+    c.setVisible(true);
+    c.moveAway();
+    await vi.advanceTimersByTimeAsync(0);
+
+    c.moveHere();
+    c.setHere(sdkState({ paused: true }));
+
+    expect(c.view()).toMatchObject({ source: 'here', paused: true });
+  });
+
+  it('checks a few times after a move, then only at the normal pace', async () => {
+    const c = controller();
+    c.setVisible(true);
+    c.setHere(sdkState());
+    api.playbackState.mockResolvedValue(apiState({ is_playing: false }));
+
+    c.moveAway();
+    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[2]);
+    expect(api.playbackState).toHaveBeenCalledTimes(CHECKS_AFTER_MOVE_MS.length);
+
+    await vi.advanceTimersByTimeAsync(POLL_IDLE_MS);
+    expect(api.playbackState).toHaveBeenCalledTimes(CHECKS_AFTER_MOVE_MS.length + 1);
+  });
+
+  it('reset() forgets a move away and its pending checks', async () => {
+    const c = controller();
+    c.moveAway();
+    c.reset();
+    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[2]);
+
+    expect(api.playbackState).not.toHaveBeenCalled();
+    c.setHere(sdkState({ paused: true }));
+    expect(c.view()).toMatchObject({ source: 'here', paused: true });
   });
 
   it('stop() ends polling for good', async () => {

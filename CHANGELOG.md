@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Output device: Settings → Audio chooses where Playlish plays (by device name; System default by default). The choice is remembered; if that device is unplugged, Playlish plays on the default until it is back. The smoke test checks switching when a second output device is connected.
 - Output device in the tray menu: "Play on" lists the system default and every output, so you can switch without opening the window.
 
+### Fixed
+
+- After moving playback to another device, the bar shows where it plays ("Playing on …") instead of this computer's paused track.
+
 ## [0.1.0] - 2026-10-04
 
 The first release: a lightweight Spotify player for Windows with Now Playing, Library, Search, Queue, Devices, media keys, the tray, and the groundwork for plugins.

@@ -47,6 +47,7 @@ describe('DevicesController', () => {
   let own: string | null;
   let playing: boolean;
   let afterTransfer: number;
+  let transferredTo: string | null;
   let errors: unknown[];
 
   function controller() {
@@ -55,8 +56,9 @@ describe('DevicesController', () => {
       ownDeviceId: () => own,
       isPlaying: () => playing,
       onChange: () => undefined,
-      afterTransfer: () => {
+      afterTransfer: (id) => {
         afterTransfer++;
+        transferredTo = id;
       },
       onError: (e) => errors.push(e),
     });
@@ -71,6 +73,7 @@ describe('DevicesController', () => {
     own = 'ours';
     playing = true;
     afterTransfer = 0;
+    transferredTo = null;
     errors = [];
   });
 
@@ -107,6 +110,7 @@ describe('DevicesController', () => {
     expect(api.transfer).toHaveBeenCalledWith('k', true);
     expect(c.view().list?.find((d) => d.active)?.id).toBe('k');
     expect(afterTransfer).toBe(1);
+    expect(transferredTo).toBe('k');
     await vi.advanceTimersByTimeAsync(REFRESH_AFTER_TRANSFER_MS);
     expect(api.devices).toHaveBeenCalledTimes(2);
   });
