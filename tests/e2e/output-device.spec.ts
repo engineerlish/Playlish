@@ -22,7 +22,8 @@ test.describe('output device', () => {
   test("the SDK's cross-origin iframe may see output devices but never record", async ({ start, fake }) => {
     // Stands in for the SDK's iframe (sdk.scdn.co): another origin than the playback host page, like the real one.
     fake.on('GET', '/embedded', { status: 200, headers: { 'Content-Type': 'text/html' }, body: '<!doctype html><title>SDK frame</title>' });
-    const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID });
+    // A fake microphone, so the request below reaches Playlish's permission check even on a machine without one (CI).
+    const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID, chromiumArgs: ['--use-fake-device-for-media-stream'] });
     await ui.click('#login');
     await waitForPlayerReady(app);
 

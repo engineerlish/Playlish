@@ -77,6 +77,8 @@ export interface LaunchOptions {
   eqDir?: string;
   /** Set false when the app is expected to start without a window (for example "start in the tray"). */
   expectWindow?: boolean;
+  /** Extra Chromium switches, for example a fake microphone on machines that have none. */
+  chromiumArgs?: string[];
 }
 
 /** Launches Playlish and waits for its main window (unless tray-only). */
@@ -98,7 +100,7 @@ export async function launch(options: LaunchOptions): Promise<Launched> {
   });
   const app = await electron.launch({
     executablePath: ELECTRON_EXE,
-    args: ['.', `--user-data-dir=${userDataDir}`, ...(options.trayOnly ? ['--tray'] : []), ...(options.safeMode ? ['--safe-mode'] : [])],
+    args: ['.', `--user-data-dir=${userDataDir}`, ...(options.trayOnly ? ['--tray'] : []), ...(options.safeMode ? ['--safe-mode'] : []), ...(options.chromiumArgs ?? [])],
     cwd: ROOT,
     env,
   });
