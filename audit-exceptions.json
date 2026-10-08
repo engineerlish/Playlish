@@ -1,0 +1,11 @@
+{
+  "$comment": "Advisories accepted after review, used by scripts/audit.mjs in the nightly run. Every entry needs a reason and an expiry date; an expired entry fails the audit again so it gets looked at.",
+  "exceptions": [
+    {
+      "advisory": "GHSA-hp3w-g68c-fv3c",
+      "package": "sprintf-js",
+      "reason": "Denial of service through unbounded precision specifiers. No fixed version exists (1.1.3 is the latest). Only reached through electron-builder's download tooling (global-agent > roarr) at build time, with no untrusted format strings; it never ships in Playlish.",
+      "until": "2027-01-06"
+    }
+  ]
+}

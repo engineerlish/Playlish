@@ -39,9 +39,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Nightly audit is stricter than the pull request one: any advisory level is reported.
+      # Nightly audit is stricter than the pull request one: any advisory level fails, except the ones reviewed and
+      # accepted (with a reason and an expiry date) in audit-exceptions.json.
       - name: Dependency audit (all levels)
-        run: npm audit
+        run: node scripts/audit.mjs
 
       - name: Write summary
         if: always()
