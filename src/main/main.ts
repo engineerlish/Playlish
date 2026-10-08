@@ -176,6 +176,25 @@ function installSdkStub(config: E2eConfig): void {
   );
 }
 
+/**
+ * The playback session runs Spotify's code (the SDK and its iframe). Its iframe is allowed the "microphone" feature so it
+ * can see and choose output devices (#89, see host.ts), so recording is refused here: every microphone and camera
+ * request from this session is denied. Other permissions keep Electron's defaults (Widevine needs them).
+ */
+function restrictPlaybackPermissions(): void {
+  electronSession.fromPartition('persist:playback').setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    if (permission === 'media') {
+      playerLog.warn('Refused a microphone or camera request from the playback host', {
+        code: 'MEDIA_CAPTURE_DENIED',
+        context: { mediaTypes: 'mediaTypes' in details ? details.mediaTypes : [] },
+      });
+      callback(false);
+      return;
+    }
+    callback(true);
+  });
+}
+
 /** Lets the user save a redacted diagnostics bundle and shows it in Explorer. */
 async function exportDiagnostics(): Promise<void> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -961,6 +980,7 @@ async function main(): Promise<void> {
         (err: unknown) => widevineLog.error('Widevine CDM failed to load', { code: 'WIDEVINE_NOT_READY', error: err }),
       );
   await app.whenReady();
+  restrictPlaybackPermissions();
   if (e2e) {
     installSdkStub(e2e);
     // Lets the tests click the tray icon, which Playwright cannot reach.
