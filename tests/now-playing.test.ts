@@ -15,6 +15,9 @@ import {
 import type { PlaybackState as ApiPlaybackState, Track } from '../src/main/spotify/types';
 import type { PlaybackState, PlayerCommand } from '../src/shared/types';
 
+/** When the last check after a move happens. */
+const LAST_CHECK_MS = CHECKS_AFTER_MOVE_MS[CHECKS_AFTER_MOVE_MS.length - 1] ?? 0;
+
 const IMAGES = [
   { url: 'https://i.scdn.co/640', width: 640, height: 640 },
   { url: 'https://i.scdn.co/64', width: 64, height: 64 },
@@ -168,6 +171,7 @@ describe('NowPlayingController', () => {
   let errors: unknown[];
   let loggedIn: boolean;
   let ownDevice: string | null;
+  let logs: { message: string; context: Record<string, unknown> }[];
 
   function controller() {
     return new NowPlayingController({
@@ -182,6 +186,7 @@ describe('NowPlayingController', () => {
         changes++;
       },
       onError: (e) => errors.push(e),
+      log: (message, context) => logs.push({ message, context }),
       now: () => Date.now(),
     });
   }
@@ -204,6 +209,7 @@ describe('NowPlayingController', () => {
     errors = [];
     loggedIn = true;
     ownDevice = 'ours';
+    logs = [];
   });
 
   afterEach(() => {
@@ -442,17 +448,53 @@ describe('NowPlayingController', () => {
     expect(c.view()?.source).toBe('elsewhere');
   });
 
-  it('after moving playback away, a playing SDK state means the music is back here', async () => {
+  it('after moving playback away, a playing SDK state does not take the bar back while Spotify says it plays elsewhere', async () => {
     const c = controller();
+    c.setHere(sdkState());
     c.moveAway();
     await vi.advanceTimersByTimeAsync(0);
+    const checks = api.playbackState.mock.calls.length;
 
-    c.setHere(sdkState({ paused: false }));
-    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[2]);
+    // The SDK goes on describing the playback, now on the other device.
+    c.setHere(sdkState({ paused: false, positionMs: 9_000 }));
+    await vi.advanceTimersByTimeAsync(0);
 
-    expect(c.view()).toMatchObject({ source: 'here', track: 'Here Song' });
-    // The remaining checks after the move were dropped.
-    expect(api.playbackState).toHaveBeenCalledTimes(1);
+    // It asked Spotify at once, and kept showing the other device.
+    expect(api.playbackState.mock.calls.length).toBe(checks + 1);
+    expect(c.view()).toMatchObject({ source: 'elsewhere', deviceName: 'Kitchen speaker' });
+  });
+
+  it('after moving playback away, the bar comes back here once Spotify reports this computer as the player', async () => {
+    const c = controller();
+    c.setHere(sdkState());
+    api.playbackState.mockResolvedValueOnce(apiState()).mockResolvedValue(apiState({}, { id: 'ours', name: 'Playlish' }));
+    c.moveAway();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.view()?.source).toBe('elsewhere');
+
+    // Moved back from another app: the SDK plays, and Spotify now names this computer.
+    c.setHere(sdkState({ track: 'Back Here', paused: false }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(c.view()).toMatchObject({ source: 'here', track: 'Back Here' });
+    // No more checks after that.
+    const calls = api.playbackState.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(LAST_CHECK_MS);
+    expect(api.playbackState.mock.calls.length).toBe(calls);
+  });
+
+  it('logs the move and every check after it', async () => {
+    const c = controller();
+    c.setHere(sdkState());
+    api.playbackState.mockResolvedValueOnce(null).mockResolvedValue(apiState());
+    c.moveAway();
+    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[1]);
+
+    expect(logs.map((l) => l.context)).toEqual([
+      { checks: CHECKS_AFTER_MOVE_MS.length },
+      { active: 'none', playing: false },
+      { active: 'other', playing: true },
+    ]);
   });
 
   it('moving playback back here lets a paused SDK state count again', async () => {
@@ -474,7 +516,7 @@ describe('NowPlayingController', () => {
     api.playbackState.mockResolvedValue(apiState({ is_playing: false }));
 
     c.moveAway();
-    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[2]);
+    await vi.advanceTimersByTimeAsync(LAST_CHECK_MS);
     expect(api.playbackState).toHaveBeenCalledTimes(CHECKS_AFTER_MOVE_MS.length);
 
     await vi.advanceTimersByTimeAsync(POLL_IDLE_MS);
@@ -485,7 +527,7 @@ describe('NowPlayingController', () => {
     const c = controller();
     c.moveAway();
     c.reset();
-    await vi.advanceTimersByTimeAsync(CHECKS_AFTER_MOVE_MS[2]);
+    await vi.advanceTimersByTimeAsync(LAST_CHECK_MS);
 
     expect(api.playbackState).not.toHaveBeenCalled();
     c.setHere(sdkState({ paused: true }));
