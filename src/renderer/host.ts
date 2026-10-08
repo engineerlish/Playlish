@@ -232,6 +232,47 @@ function reportOutputs(): void {
 reportOutputs();
 navigator.mediaDevices.addEventListener('devicechange', reportOutputs);
 
+/**
+ * Output device choice (#89) inside the SDK's iframe. Chromium shows a cross-origin frame the computer's output devices
+ * (with names, so the output hook can find the chosen one) only when the "microphone" feature is delegated to it;
+ * without it the frame sees one nameless device and always plays on the default (smoke test, 2026-10-08). So every
+ * iframe this page gets (only the SDK's) is given that delegation before it loads. Recording stays impossible: the
+ * main process refuses every microphone and camera request from the playback session.
+ */
+function delegateOutputDevices(): void {
+  /** The features in an iframe's allow attribute, and whether "microphone" is one of them. */
+  const features = (frame: HTMLIFrameElement): string[] =>
+    frame.allow
+      .split(';')
+      .map((f) => f.trim())
+      .filter(Boolean);
+  const delegated = (frame: HTMLIFrameElement): boolean => features(frame).some((f) => f.split(' ')[0] === 'microphone');
+  const withDelegation = (node: Node): void => {
+    if (node instanceof HTMLIFrameElement && !delegated(node)) node.allow = [...features(node), 'microphone'].join('; ');
+  };
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const appendChild = Node.prototype.appendChild;
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const insertBefore = Node.prototype.insertBefore;
+  Node.prototype.appendChild = function <T extends Node>(this: Node, node: T): T {
+    withDelegation(node);
+    return appendChild.call(this, node) as T;
+  };
+  Node.prototype.insertBefore = function <T extends Node>(this: Node, node: T, child: Node | null): T {
+    withDelegation(node);
+    return insertBefore.call(this, node, child) as T;
+  };
+  // Any other way in is too late to change (the frame is already loading): report it, so a smoke failure is explained.
+  new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof HTMLIFrameElement && !delegated(node)) window.host.log('an iframe was added without output device access');
+      }
+    }
+  }).observe(document, { childList: true, subtree: true });
+}
+delegateOutputDevices();
+
 // The SDK script calls this global once it has loaded; it must exist before the script is added.
 window.onSpotifyWebPlaybackSDKReady = startPlayer;
 const script = document.createElement('script');

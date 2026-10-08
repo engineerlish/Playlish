@@ -19,6 +19,37 @@ test.describe('output device', () => {
     expect(tracked).toBeGreaterThanOrEqual(1);
   });
 
+  test("the SDK's cross-origin iframe may see output devices but never record", async ({ start, fake }) => {
+    // Stands in for the SDK's iframe (sdk.scdn.co): another origin than the playback host page, like the real one.
+    fake.on('GET', '/embedded', { status: 200, headers: { 'Content-Type': 'text/html' }, body: '<!doctype html><title>SDK frame</title>' });
+    // A fake microphone, so the request below reaches Playlish's permission check even on a machine without one (CI).
+    const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID, chromiumArgs: ['--use-fake-device-for-media-stream'] });
+    await ui.click('#login');
+    await waitForPlayerReady(app);
+
+    // Added the way the SDK adds it.
+    const allow = await inHost<string>(app, `(() => { const f = document.createElement('iframe'); f.src = ${JSON.stringify(`${fake.baseUrl}/embedded`)}; document.body.appendChild(f); return f.allow; })()`);
+    expect(allow).toBe('microphone');
+
+    /** Runs JavaScript in that iframe, once it has loaded. */
+    const inFrame = <T>(script: string) =>
+      app.evaluate(async ({ BrowserWindow }, js) => {
+        const host = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/host.html'));
+        const frame = host?.webContents.mainFrame.framesInSubtree.find((f) => f.url.endsWith('/embedded'));
+        if (!frame) throw new Error('The iframe has not loaded yet');
+        return (await frame.executeJavaScript(js));
+      }, script) as Promise<T>;
+    // Chromium shows a cross-origin frame the output devices (by name) only with this feature.
+    await expect.poll(() => inFrame<boolean>('document.featurePolicy.allowsFeature("microphone")').catch(() => false)).toBe(true);
+    // The output hook is installed there too, so the chosen device applies to the SDK's audio.
+    await expect.poll(() => inFrame<boolean>('Boolean(window.__playlishOutput)').catch(() => false)).toBe(true);
+
+    // Recording is refused all the same.
+    const capture = await inFrame<string>("navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => { s.getTracks().forEach((t) => t.stop()); return 'granted'; }, (e) => e.name)");
+    expect(capture).toBe('NotAllowedError');
+    await expect.poll(() => logEntries(userDataDir, 'MEDIA_CAPTURE_DENIED').length).toBeGreaterThan(0);
+  });
+
   test('a chosen device that is not connected falls back to the default and says so; the choice is remembered', async ({ start }) => {
     const first = await start({ clientId: TEST_CLIENT_ID });
     await first.ui.click('#login');
