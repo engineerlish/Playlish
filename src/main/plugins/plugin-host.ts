@@ -1,5 +1,5 @@
 import type { FromHost, ToHost } from './protocol';
-import type { SandboxLimits, Violation } from './sandbox';
+import type { SandboxLimits, Violation } from './limits';
 
 /*
  * The main process's side of the plugin-host process (#100).

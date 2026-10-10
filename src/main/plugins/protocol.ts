@@ -1,4 +1,4 @@
-import type { SandboxLimits, Violation } from './sandbox';
+import type { SandboxLimits, Violation } from './limits';
 
 /*
  * Messages between the main process and the plugin-host process (#100). Everything is plain data (structured clone).
