@@ -4,6 +4,7 @@
  */
 
 import type { Page } from './pages';
+import type { PluginPrompt, PluginView } from './plugins';
 
 /** Commands the playback host (hidden SDK window) can execute directly. */
 export type PlayerCommand =
@@ -261,8 +262,12 @@ export interface Snapshot {
   devices: DevicesView;
   /** All plugins are off for this run (started with --safe-mode). */
   safeMode: boolean;
-  /** Installed plugins; always empty until the plugin system (0.3.0). */
-  plugins: { id: string; name: string; version: string; enabled: boolean }[];
+  /** Installed plugins (#101). */
+  plugins: PluginView[];
+  /** The permission prompt for a package being installed, waiting for an answer. */
+  pluginPrompt: PluginPrompt | null;
+  /** Why the last package could not be installed, until dismissed. */
+  pluginError: string | null;
   /** The tray and start-up options on the Settings page. */
   preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean; checkForUpdates: boolean };
   /** Name of the chosen output device (#89), or null for the system default. */
@@ -314,6 +319,13 @@ export interface UiApi {
   transfer(deviceId: string): void;
   /** Restarts Playlish with all plugins off (true) or normally (false). */
   restart(safeMode: boolean): void;
+  /** Plugins (#101): pick a .playlish file, answer its permission prompt, turn plugins on or off, uninstall them. */
+  installPlugin(): void;
+  approvePlugin(token: string): void;
+  cancelPlugin(token: string): void;
+  setPluginEnabled(id: string, enabled: boolean): void;
+  uninstallPlugin(id: string): void;
+  dismissPluginError(): void;
   /** Turns a tray or start-up option on or off. */
   setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized' | 'checkForUpdates', value: boolean): void;
   /** Opens the release page of the update in the browser. */

@@ -1,4 +1,5 @@
 import { newQuickJSWASMModule, newVariant, RELEASE_SYNC, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime, type QuickJSWASMModule } from 'quickjs-emscripten';
+import { DEFAULT_LIMITS, type SandboxLimits, type Violation } from './limits';
 
 /*
  * One plugin's sandbox (#100): its own QuickJS engine compiled to WebAssembly, with hard limits.
@@ -38,18 +39,8 @@ export async function createEngine(hardMemoryMb: number): Promise<Engine> {
   return { module, memory };
 }
 
-export interface SandboxLimits {
-  /** QuickJS heap limit (MB). */
-  memoryMb: number;
-  /** Hard WebAssembly memory ceiling (MB); must be larger than memoryMb. */
-  hardMemoryMb: number;
-  cpuMsPerCall: number;
-  cpuMsPerMinute: number;
-  maxViolations: number;
-}
-
-// CHANGE HERE: default limits (the #82 plan: 16 MB soft, 32 MB hard, 50 ms per event, 500 ms per minute).
-export const DEFAULT_LIMITS: SandboxLimits = { memoryMb: 16, hardMemoryMb: 32, cpuMsPerCall: 50, cpuMsPerMinute: 500, maxViolations: 3 };
+// The limits live in limits.ts so the main process can use them without loading QuickJS.
+export { DEFAULT_LIMITS, type SandboxLimits, type Violation };
 
 /** What the sandbox asks of the host: actions (checked by the host for permissions) and log lines. */
 export interface SandboxHost {
@@ -57,7 +48,6 @@ export interface SandboxHost {
   log(level: 'info' | 'warn' | 'error', message: string): void;
 }
 
-export type Violation = 'memory' | 'cpu' | 'cpu-minute' | 'error';
 
 export class SandboxDisabledError extends Error {
   constructor(readonly reasons: Violation[]) {

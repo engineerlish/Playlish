@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell } from 'electron';
+import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell, utilityProcess } from 'electron';
 import { execFile, execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -13,6 +13,9 @@ import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
+import { PluginManager } from './plugins/manager';
+import { PluginHost } from './plugins/plugin-host';
+import { PluginStore } from './plugins/store';
 import { recallVolume, rememberVolume, volumeKey } from './device-volume';
 import { DevicesController } from './devices';
 import { REGISTRY_KEY, parseRegQuery } from './eq/apo';
@@ -195,6 +198,47 @@ function restrictPlaybackPermissions(): void {
   });
 }
 
+let plugins: PluginManager | null = null;
+let pluginHost: PluginHost | null = null;
+const pluginLog = log.child('plugins');
+
+/**
+ * The plugin system (#101): installed plugins, and the plugin-host process that runs the ones that are on (it only
+ * exists while at least one is). Plugin actions arrive with API v1 (#102); until then every action is refused.
+ */
+function startPlugins(): void {
+  const store = new PluginStore(app.getPath('userData'), (message) => pluginLog.warn(message, { code: 'PLUGIN_STORE' }));
+  const forPlugin = (id: string) => logging.plugins.forPlugin(id, store.get(id)?.manifest.version ?? 'unknown');
+  pluginHost = new PluginHost({
+    spawn: () =>
+      utilityProcess.fork(path.join(__dirname, 'plugins', 'host-process.js'), [], { serviceName: 'Playlish plugins', stdio: 'ignore' }),
+    handleCall: () => Promise.reject(new Error('Plugin actions are not available yet (plugin API v1).')),
+    onLog: (id, level, message) => forPlugin(id)[level](message.slice(0, 500)),
+    onDisabled: (id, reasons) => plugins?.onHostDisabled(id, reasons),
+    onEventFailed: (id, event, error) => forPlugin(id).error(`Handling ${event} failed: ${error.slice(0, 300)}`),
+    warn: (message) => pluginLog.warn(message, { code: 'PLUGIN_HOST' }),
+  });
+  plugins = new PluginManager({
+    store,
+    host: pluginHost,
+    safeMode,
+    readFile: (file) => fs.readFileSync(file),
+    fileSize: (file) => fs.statSync(file).size,
+    onChange: () => pushSnapshot(),
+    log: (level, message, context) => pluginLog[level](message, { code: 'PLUGIN', context }),
+  });
+  void plugins.start();
+}
+
+/** Lets the user pick a .playlish file; the plugin manager then shows its permission prompt. */
+async function pickPluginPackage(): Promise<void> {
+  const options: Electron.OpenDialogOptions = { title: 'Install a plugin', filters: [{ name: 'Playlish plugin', extensions: ['playlish'] }], properties: ['openFile'] };
+  const parent = uiWindow && !uiWindow.isDestroyed() ? uiWindow : null;
+  const choice = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+  const file = choice.filePaths[0];
+  if (!choice.canceled && file) plugins?.openPackage(file);
+}
+
 /** Lets the user save a redacted diagnostics bundle and shows it in Explorer. */
 async function exportDiagnostics(): Promise<void> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -246,7 +290,9 @@ function snapshot(): Snapshot {
     playback: nowPlaying.view(),
     devices: devices.view(),
     safeMode,
-    plugins: [],
+    plugins: plugins?.views() ?? [],
+    pluginPrompt: plugins?.pendingPrompt() ?? null,
+    pluginError: plugins?.lastError() ?? null,
     preferences: {
       closeToTray: settings?.get().closeToTray ?? true,
       minimizeToTray: settings?.get().minimizeToTray ?? false,
@@ -878,6 +924,20 @@ function registerIpc(): void {
   });
   ipcMain.on('ui:setup-eq', () => void equalizer.setup());
   ipcMain.on('ui:open-eq-download', () => void openInBrowser(EQ_APO_DOWNLOAD));
+  ipcMain.on('ui:plugin-install', () => void pickPluginPackage());
+  ipcMain.on('ui:plugin-approve', (_event, token: unknown) => {
+    if (typeof token === 'string') void plugins?.approve(token);
+  });
+  ipcMain.on('ui:plugin-cancel', (_event, token: unknown) => {
+    if (typeof token === 'string') plugins?.cancel(token);
+  });
+  ipcMain.on('ui:plugin-enable', (_event, id: unknown, enabled: unknown) => {
+    if (typeof id === 'string' && typeof enabled === 'boolean') void plugins?.setEnabled(id, enabled);
+  });
+  ipcMain.on('ui:plugin-uninstall', (_event, id: unknown) => {
+    if (typeof id === 'string') plugins?.uninstall(id);
+  });
+  ipcMain.on('ui:plugin-dismiss-error', () => plugins?.dismissError());
   ipcMain.on('ui:open-update', () => {
     // The address was checked when the release was read: only this project's release pages.
     if (update) void openInBrowser(update.url);
@@ -1005,6 +1065,7 @@ async function main(): Promise<void> {
     report: (message) => settingsLog.warn(message, { code: 'SETTINGS' }),
   });
   log.info('Playlish starting', { context: { version: app.getVersion(), electron: process.versions.electron, level: log.level } });
+  startPlugins();
 
   metrics = new MetricsLogger(
     path.join(app.getPath('userData'), 'perf.csv'),
@@ -1091,6 +1152,7 @@ async function main(): Promise<void> {
 }
 
 app.on('before-quit', () => {
+  pluginHost?.stop();
   nowPlaying.stop();
   devices.stop();
   metrics?.stop();
