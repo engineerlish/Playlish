@@ -118,10 +118,11 @@ export async function launch(options: LaunchOptions): Promise<Launched> {
 
 /** The main window: an open one, or the next one to open. The hidden playback host is never returned. */
 export async function uiWindow(app: ElectronApplication): Promise<Page> {
-  // Polled: Playwright reports a new window before it has navigated, while its URL is still about:blank.
+  // Polled: Playwright reports a new window before it has navigated, while its URL is still about:blank. A window that
+  // was just closed can still be listed for a moment, so closed pages are skipped (a reopened window is a new page).
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const page = app.windows().find((p) => p.url().endsWith('/ui.html'));
+    const page = app.windows().find((p) => !p.isClosed() && p.url().endsWith('/ui.html'));
     if (page) {
       await page.waitForSelector('#app > *');
       return page;
