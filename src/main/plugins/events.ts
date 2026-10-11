@@ -23,7 +23,8 @@ export class PluginEvents {
     const payload = playbackForPlugins(view);
     const trackKey = (v: NowPlaying | null) => (v ? (v.trackUri ?? `${v.track}\n${v.artists}`) : null);
     const deviceKey = (v: NowPlaying | null) => (v ? `${v.source}\n${v.deviceName ?? ''}` : null);
-    const stateKey = (v: NowPlaying | null) => (v ? JSON.stringify([v.paused, v.shuffle, v.repeat, v.volume === null ? null : Math.round(v.volume * 100), v.muted]) : null);
+    const stateKey = (v: NowPlaying | null) =>
+      v ? JSON.stringify([v.paused, v.shuffle, v.repeat, v.volume === null ? null : Math.round(v.volume * 100), v.muted, v.contextUri ?? null]) : null;
 
     if (deviceKey(before) !== deviceKey(view)) this.send('device.changed', payload);
     if (trackKey(before) !== trackKey(view)) {

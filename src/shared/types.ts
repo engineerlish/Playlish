@@ -50,6 +50,8 @@ export interface PlaybackState {
   shuffle: boolean;
   repeat: RepeatMode;
   muted: boolean;
+  /** The album, playlist, artist or show playing from, when Spotify says (#104). */
+  contextUri?: string | null;
 }
 
 /** What the Now Playing bar shows, from this device (SDK events) or another device (polled Web API). */
@@ -73,6 +75,8 @@ export interface NowPlaying {
   /** 0..1, or null when the device does not allow volume changes. */
   volume: number | null;
   muted: boolean;
+  /** The album, playlist, artist or show playing from, when Spotify says (#104). */
+  contextUri?: string | null;
 }
 
 /** One resource sample covering every process of the app (main, GPU, renderers, utility). */

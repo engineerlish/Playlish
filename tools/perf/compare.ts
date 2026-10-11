@@ -4,7 +4,8 @@
  *
  *   node tools/perf/compare.ts --current <dir> [--baseline <dir>] [--enforce]
  *
- * Reads perf-*.json files written by run.ts. --enforce exits non-zero when any budget check fails.
+ * Reads perf-*.json files written by run.ts. --enforce exits non-zero when any budget check fails, except in results
+ * marked advisory (run.ts --advisory), which are reported only.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -14,12 +15,21 @@ const MARKER = '<!-- playlish-perf-summary -->';
 
 interface ResultFile {
   scenario: string;
+  /** Run with the example plugins on (older results have no such field). */
+  plugins?: boolean;
+  /** Reported, never enforced. */
+  advisory?: boolean;
   commit: string;
   checks: Check[];
   pass: boolean;
 }
 
-/** Reads every perf-*.json in a folder, keyed by scenario. Missing folders give an empty map. */
+/** The name a result is shown and compared under: the scenario, and whether plugins were on. */
+function keyOf(result: ResultFile): string {
+  return result.plugins ? `${result.scenario} with plugins` : result.scenario;
+}
+
+/** Reads every perf-*.json in a folder, keyed by scenario (and plugins). Missing folders give an empty map. */
 function readResults(dir: string | null): Map<string, ResultFile> {
   const results = new Map<string, ResultFile>();
   if (!dir || !fs.existsSync(dir)) return results;
@@ -27,7 +37,7 @@ function readResults(dir: string | null): Map<string, ResultFile> {
     if (!/^perf-.*\.json$/.test(name)) continue;
     try {
       const result = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as ResultFile;
-      results.set(result.scenario, result);
+      results.set(keyOf(result), result);
     } catch {
       // Ignore unreadable files.
     }
@@ -58,7 +68,7 @@ if (current.size === 0) {
   if (baseline.size === 0) lines.push('_No baseline from main yet; showing budgets only._', '');
   for (const [scenario, result] of current) {
     const base = baseline.get(scenario);
-    lines.push(`**${scenario}** (commit ${result.commit}${base ? `, compared with main ${base.commit}` : ''})`, '');
+    lines.push(`**${scenario}**${result.advisory ? ' (report only)' : ''} (commit ${result.commit}${base ? `, compared with main ${base.commit}` : ''})`, '');
     lines.push('| Check | Measured | Budget | Main | Change | Result |', '|---|---|---|---|---|---|');
     for (const c of result.checks) {
       const b = base?.checks.find((x) => x.name === c.name);
@@ -70,4 +80,4 @@ if (current.size === 0) {
 }
 process.stdout.write(`${lines.join('\n')}\n`);
 
-if (argv.includes('--enforce') && [...current.values()].some((r) => !r.pass)) process.exitCode = 1;
+if (argv.includes('--enforce') && [...current.values()].some((r) => !r.pass && !r.advisory)) process.exitCode = 1;

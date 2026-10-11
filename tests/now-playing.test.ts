@@ -119,6 +119,7 @@ describe('fromSdk and fromWebApi', () => {
       repeat: 'context',
       volume: 0.4,
       muted: false,
+      contextUri: null,
     });
   });
 

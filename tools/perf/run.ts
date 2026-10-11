@@ -7,13 +7,17 @@
  *   node tools/perf/run.ts --scenario soak --minutes 60 --warmup 0.5
  *
  * Options: --settle <s> (default 20), --measure <s> (default 60), --out <file.json>, --no-fail (report only),
+ * --plugins (installs the example plugins first; memory budgets then include the plugin process), --advisory (the
+ * result is reported but never fails CI),
  * --warmup <fraction> (soak only: the share of the run left out of the growth trend, default 0.2).
  * Windows only (the budgets are about the Windows process tree). Needs `npm run build` and the Electron binary.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import { createRequire } from 'node:module';
 import * as path from 'node:path';
+import { pack } from '../plugins/pack.ts';
 import {
   check,
   checksToMarkdown,
@@ -38,12 +42,20 @@ interface Options {
   soakMinutes: number;
   /** Share of the soak's samples left out of the growth trend while native caches fill up. */
   warmupFraction: number;
+  /** Run with the example plugins installed and on (#104). */
+  plugins: boolean;
+  /** Report only: compare.ts never fails CI on this result. */
+  advisory: boolean;
   out: string | null;
   fail: boolean;
 }
 
 export interface PerfResult {
   scenario: Scenario;
+  /** Run with the example plugins on (--plugins). */
+  plugins: boolean;
+  /** Reported, never enforced (--advisory). */
+  advisory: boolean;
   date: string;
   commit: string;
   machine: { cpu: string; cores: number; memoryGb: number; os: string };
@@ -106,6 +118,8 @@ function parseArgs(argv: string[]): Options {
     measureSec: Number(value('measure') ?? 60),
     soakMinutes: Number(value('minutes') ?? 30),
     warmupFraction: warmup,
+    plugins: argv.includes('--plugins'),
+    advisory: argv.includes('--advisory'),
     out: value('out') ?? null,
     fail: !argv.includes('--no-fail'),
   };
@@ -139,12 +153,37 @@ function stopApp(pid: number | undefined): void {
   }
 }
 
+// CHANGE HERE: the plugins --plugins installs (folders in examples/).
+const EXAMPLE_PLUGINS = ['listening-stats', 'smart-shuffle', 'eq-by-playlist'];
+
+/** Installs the example plugins into a profile, through the built app's own package checks and store. */
+function installExamplePlugins(profile: string): void {
+  const require = createRequire(import.meta.url);
+  const { PluginStore, inspectPackage } = require(path.join(ROOT, 'dist', 'main', 'plugins', 'store.js')) as {
+    PluginStore: new (userData: string) => { install(pkg: unknown): unknown };
+    inspectPackage: (buf: Buffer) => unknown;
+  };
+  const store = new PluginStore(profile);
+  for (const name of EXAMPLE_PLUGINS) store.install(inspectPackage(pack(path.join(ROOT, 'examples', name))));
+}
+
+/** How many installed plugins are still on (Playlish turns off one that breaks its limits). */
+function pluginsStillOn(profile: string): number {
+  try {
+    const index = JSON.parse(readText(path.join(profile, 'plugins', 'installed.json'))) as { plugins: { enabled: boolean }[] };
+    return index.plugins.filter((p) => p.enabled).length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Runs one scenario and returns its result. */
 async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
   if (!fs.existsSync(EXE)) throw new Error('Electron binary missing: run npm ci (with install scripts) first.');
   if (!fs.existsSync(path.join(ROOT, 'dist', 'main', 'main.js'))) throw new Error('App not built: run npm run build first.');
 
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'playlish-perf-'));
+  if (options.plugins) installExamplePlugins(profile);
   const logFile = path.join(profile, 'logs', 'playlish.log');
   const csvFile = path.join(profile, 'perf.csv');
   const args = ['.', `--user-data-dir=${profile}`, ...(options.scenario === 'ui' ? [] : ['--tray'])];
@@ -187,13 +226,16 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
     const startup = { trayMs: findMilestone(logText, 'STARTUP_TRAY'), uiMs: findMilestone(logText, 'STARTUP_UI'), wallClockMs };
 
     const checks: Check[] = [];
+    // With plugins, memory budgets include the plugin process.
+    const extra = options.plugins ? budgets.pluginHostPrivateMb : 0;
+    const withPlugins = options.plugins ? ' with plugins' : '';
     if (summary && options.scenario === 'idle') {
-      checks.push(check('Idle tray RAM (private, avg)', summary.privateMbAvg, budgets.idleTrayPrivateMb, 'MB'));
+      checks.push(check(`Idle tray RAM${withPlugins} (private, avg)`, summary.privateMbAvg, budgets.idleTrayPrivateMb + extra, 'MB'));
       checks.push(check('Idle CPU (avg)', summary.cpuPercentAvg, budgets.idleCpuPercent, '%'));
       if (startup.trayMs !== null) checks.push(check('Cold start to tray', startup.trayMs, budgets.coldStartTrayMs, 'ms'));
     }
     if (summary && options.scenario === 'ui') {
-      checks.push(check('UI open RAM (private, avg)', summary.privateMbAvg, budgets.uiOpenPrivateMb, 'MB'));
+      checks.push(check(`UI open RAM${withPlugins} (private, avg)`, summary.privateMbAvg, budgets.uiOpenPrivateMb + extra, 'MB'));
       checks.push(check('UI open idle CPU (avg)', summary.cpuPercentAvg, budgets.idleCpuPercent, '%'));
       if (startup.uiMs !== null) checks.push(check('Cold start to usable UI', startup.uiMs, budgets.coldStartUiMs, 'ms'));
     }
@@ -201,7 +243,11 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
     // The soak opens and closes the window all the time, so its window-closed samples are "the tray after use" (#34).
     if (options.scenario === 'soak' && trayOnly.length >= 10) {
       const avg = trayOnly.reduce((sum, s) => sum + s.privateMb, 0) / trayOnly.length;
-      checks.push(check('Tray RAM after the window was used (private, avg)', Math.round(avg * 10) / 10, budgets.trayAfterUiPrivateMb, 'MB'));
+      checks.push(check(`Tray RAM after the window was used${withPlugins} (private, avg)`, Math.round(avg * 10) / 10, budgets.trayAfterUiPrivateMb + extra, 'MB'));
+    }
+    if (options.plugins) {
+      const on = pluginsStillOn(profile);
+      checks.push({ name: 'Plugins still on at the end', value: on, limit: EXAMPLE_PLUGINS.length, unit: '', pass: on === EXAMPLE_PLUGINS.length });
     }
     if (!summary) checks.push({ name: 'Samples collected', value: 0, limit: 1, unit: '', pass: false });
     if (options.scenario === 'soak' && !trend) checks.push({ name: 'Enough soak samples for a trend', value: samples.length, limit: 10, unit: '', pass: false });
@@ -209,6 +255,8 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
     const cpus = os.cpus();
     return {
       scenario: options.scenario,
+      plugins: options.plugins,
+      advisory: options.advisory,
       date: new Date().toISOString(),
       commit: gitCommit(),
       machine: { cpu: cpus[0]?.model.trim() ?? 'unknown', cores: cpus.length, memoryGb: Math.round(os.totalmem() / 2 ** 30), os: `${os.type()} ${os.release()}` },
@@ -232,7 +280,7 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
 function toMarkdown(result: PerfResult): string {
   const s = result.summary;
   const lines = [
-    checksToMarkdown(`Performance: ${result.scenario} (commit ${result.commit})`, result.checks),
+    checksToMarkdown(`Performance: ${result.scenario}${result.plugins ? ' with plugins' : ''} (commit ${result.commit})`, result.checks),
     s ? `Samples: ${s.samples} · private avg ${s.privateMbAvg} MB, max ${s.privateMbMax} MB · CPU avg ${s.cpuPercentAvg}%, max ${s.cpuPercentMax}% · up to ${s.processesMax} processes` : 'No samples.',
     `Startup: tray ${result.startup.trayMs ?? 'n/a'} ms, UI ${result.startup.uiMs ?? 'n/a'} ms (wall clock to milestone ${result.startup.wallClockMs ?? 'n/a'} ms)`,
     ...(result.trend
@@ -249,4 +297,4 @@ const budgets = JSON.parse(readText(path.join(ROOT, 'perf', 'budgets.json'))) as
 const result = await run(options, budgets);
 process.stdout.write(toMarkdown(result));
 if (options.out) fs.writeFileSync(options.out, `${JSON.stringify(result, null, 2)}\n`);
-if (!result.pass && options.fail) process.exitCode = 1;
+if (!result.pass && options.fail && !options.advisory) process.exitCode = 1;

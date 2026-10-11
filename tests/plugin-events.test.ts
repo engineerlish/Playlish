@@ -45,6 +45,14 @@ describe('PluginEvents', () => {
     expect(names()).toEqual(Array(6).fill('playback.state'));
   });
 
+  it('playing from another playlist with the same track sends playback.state', () => {
+    events.update(np({ contextUri: 'spotify:playlist:a' }));
+    sent = [];
+    events.update(np({ contextUri: 'spotify:playlist:b' }));
+    expect(names()).toEqual(['playback.state']);
+    expect(sent[0]?.payload).toMatchObject({ context: 'spotify:playlist:b' });
+  });
+
   it('a new track sends track.changed and queue.changed (not playback.state)', () => {
     events.update(np());
     sent = [];

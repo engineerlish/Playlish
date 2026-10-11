@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "moduleDetection": "force",
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": false
+  },
+  "include": ["examples/**/*.js", "sdk/playlish.d.ts"]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "io.github.engineerlish.eq-by-playlist",
+  "name": "EQ by playlist",
+  "version": "1.0.0",
+  "author": "Playlish",
+  "description": "Switches the equalizer preset when music plays from a playlist you chose.",
+  "apiVersion": 1,
+  "permissions": ["playback.read", "library.read", "audio.control", "storage"],
+  "entry": "main.js",
+  "ui": ["plugins-page"]
+}

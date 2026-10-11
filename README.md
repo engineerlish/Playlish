@@ -14,7 +14,8 @@ Playlish plays your Spotify music through Spotify's own official Web Playback SD
 - **Queue**: what plays now and next.
 - **Devices**: see your Spotify Connect devices and move playback between them and this computer without stopping it. When music plays on another device, Playlish shows it and controls it.
 - **Windows integration**: media keys and the Windows media overlay; a tray menu with what's playing and the controls; close or minimize to the tray; start in the tray.
-- **Plugins page and safe mode**: the plugin system comes in 0.3.0. Safe mode (start with all plugins off) is already there.
+- **Audio** (next release): choose the output device (in Settings or from the tray), keep a volume per output, and use an equalizer through [Equalizer APO](https://sourceforge.net/projects/equalizerapo/).
+- **Plugins** (next release): add features with plugins that run in a sandbox, with only the permissions you approve, and never see your Spotify login. Three examples come with it (listening stats, smart shuffle, EQ by playlist); see [examples](examples) and the plugin guide, [docs/PLUGINS.md](docs/PLUGINS.md). Safe mode starts Playlish with every plugin off.
 
 ## Requirements
 
@@ -54,19 +55,19 @@ Press Play to continue where your account left off, or pick something from the L
 - Only the refresh token is stored, encrypted with Windows' own protection for your account (DPAPI through Electron's safeStorage). The access token stays in memory.
 - Playlish talks only to Spotify, plus one request a day to GitHub to see whether a new version exists (only while the window is open; nothing about you is sent; turn it off in Settings). There is no telemetry. Logs stay on your computer, and tokens, Client IDs and email addresses are removed before anything is written.
 - "Report an issue" and "Export diagnostics" (Settings) open or save a redacted report that you can read before sharing.
-- The window's content security policy allows no remote scripts; plugins (0.3.0) will run sandboxed and never see your login.
+- The window's content security policy allows no remote scripts. Plugins run in a sandbox in a separate process, never see your login, can only do what you approved, and cannot run code in the window.
 
 ## Troubleshooting
 
 - **Playback does not start, or Spotify refuses the licence**: the development Electron build must be VMP-signed; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 - **"Premium is required"**: the Web Playback SDK plays only for Premium accounts.
 - **Login fails in the browser**: the Redirect URI in your Spotify app must be exactly `http://127.0.0.1:43821/callback`.
-- **Something is broken by a plugin** (from 0.3.0): Settings → Plugins → Restart in safe mode, or start with `--safe-mode`.
+- **Something is broken by a plugin**: Plugins → Restart in safe mode, or start with `--safe-mode`. The Plugins page also says why Playlish turned a plugin off.
 - Still stuck: Settings → Report an issue.
 
 ## Performance budgets
 
-Checked on every pull request and nightly (see `perf/budgets.json`): idle tray at most 80 MB (95 MB once the window has been used) and 0.1% CPU, window open at most 150 MB, usable window within 2.5 s, and no memory growth over a 30-minute soak.
+Checked on every pull request and nightly (see `perf/budgets.json`): idle tray at most 80 MB (105 MB once the window has been used) and 0.1% CPU, window open at most 150 MB, usable window within 2.5 s, and no memory growth over the second half of a 60-minute soak. With plugins on, the plugin process adds about 40 MB.
 
 ## Development
 

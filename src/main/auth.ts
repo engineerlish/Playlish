@@ -20,6 +20,8 @@ export const SCOPES = [
   'user-library-modify',
   'playlist-read-private',
   'playlist-read-collaborative',
+  // Listening history, for plugins with "library.read" (#104). Adding it asks existing logins to log in once more.
+  'user-read-recently-played',
 ];
 // CHANGE HERE: how long we wait for the user to finish logging in in the browser.
 export const LOGIN_TIMEOUT_MS = 5 * 60_000;

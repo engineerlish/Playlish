@@ -112,3 +112,44 @@ jobs:
             perf-summary.md
           if-no-files-found: ignore
           retention-days: 90
+
+  soak-plugins:
+    name: Soak test with plugins (60 minutes)
+    runs-on: windows-latest
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies (with the Electron binary)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The same soak with the example plugins on (#104): the soak driver's playback events reach them all the time.
+      # Report only until the owner settles the allowance for the plugin process; a plugin turned off is still reported.
+      - name: Soak with plugins
+        run: node tools/perf/run.ts --scenario soak --minutes 60 --warmup 0.5 --plugins --advisory --out perf-soak-plugins.json
+
+      - name: Write report
+        if: always()
+        shell: bash
+        run: |
+          node tools/perf/compare.ts --current . > perf-summary.md
+          cat perf-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: soak-plugins-results
+          path: |
+            perf-soak-plugins.json
+            perf-summary.md
+          if-no-files-found: ignore
+          retention-days: 90

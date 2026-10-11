@@ -1,7 +1,7 @@
 import type { Panel, PluginPermission, PluginUiSlot } from '../../shared/plugins';
 import type { NowPlaying, PlayerCommand } from '../../shared/types';
 import type { PlayOptions } from '../spotify/client';
-import type { Paging, SavedTrack, SearchResults, SearchType } from '../spotify/types';
+import type { Paging, PlayHistory, SavedTrack, SearchResults, SearchType, SimplifiedPlaylist } from '../spotify/types';
 import { PanelError, parsePanel } from './panel';
 import { StorageError, type PluginStorage } from './storage';
 
@@ -50,6 +50,8 @@ export interface PluginSpotify {
   saveToLibrary(uris: string[]): Promise<void>;
   removeFromLibrary(uris: string[]): Promise<void>;
   savedTracks(offset: number, limit: number, priority: 'background'): Promise<Paging<SavedTrack>>;
+  playlists(offset: number, limit: number, priority: 'background'): Promise<Paging<SimplifiedPlaylist>>;
+  recentlyPlayed(limit: number, priority: 'background'): Promise<{ items: PlayHistory[] }>;
   search(query: string, types: SearchType[], offset: number, limit: number, priority: 'background'): Promise<SearchResults>;
 }
 
@@ -156,7 +158,13 @@ export function playbackForPlugins(view: NowPlaying | null): Record<string, unkn
     shuffle: view.shuffle,
     repeat: view.repeat,
     volume: view.volume,
+    context: view.contextUri ?? null,
   };
+}
+
+/** A Spotify track as plugins see it. */
+function pluginTrack(t: { uri: string; name: string; artists: { name: string }[]; album: { name: string }; duration_ms: number }): PluginTrack {
+  return { uri: t.uri, name: t.name, artists: t.artists.map((a) => a.name), album: t.album.name, durationMs: t.duration_ms };
 }
 
 /** Runs a playback command on whichever device plays: this computer's player, or another device through the Web API. */
@@ -241,15 +249,27 @@ const ACTIONS: Record<string, ActionDef> = {
       return {
         total: page.total,
         offset: page.offset,
-        items: page.items.map((i): PluginTrack & { addedAt: string } => ({
-          uri: i.track.uri,
-          name: i.track.name,
-          artists: i.track.artists.map((a) => a.name),
-          album: i.track.album.name,
-          durationMs: i.track.duration_ms,
-          addedAt: i.added_at,
-        })),
+        items: page.items.map((i) => ({ ...pluginTrack(i.track), addedAt: i.added_at })),
       };
+    },
+  },
+  'library.playlists': {
+    permission: 'library.read',
+    limit: 'spotify',
+    run: async (args, ctx) => {
+      const offset = integer(args['offset'], 'offset', 0, 100_000, 0);
+      const limit = integer(args['limit'], 'limit', 1, MAX_LIKED_PAGE, MAX_LIKED_PAGE);
+      const page = await spotifyOf(ctx).playlists(offset, limit, 'background');
+      return { total: page.total, offset: page.offset, items: page.items.map((p) => ({ uri: p.uri, name: p.name, tracks: p.items.total })) };
+    },
+  },
+  'history.recent': {
+    permission: 'library.read',
+    limit: 'spotify',
+    run: async (args, ctx) => {
+      const limit = integer(args['limit'], 'limit', 1, MAX_LIKED_PAGE, MAX_LIKED_PAGE);
+      const history = await spotifyOf(ctx).recentlyPlayed(limit, 'background');
+      return history.items.map((i) => ({ ...pluginTrack(i.track), playedAt: i.played_at }));
     },
   },
   search: {

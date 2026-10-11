@@ -25,6 +25,8 @@ export interface Budgets {
   coldStartTrayMs: number;
   coldStartUiMs: number;
   soakMaxGrowthPercent: number;
+  /** Added to the memory budgets when plugins are on (the plugin-host process; #82, #105). */
+  pluginHostPrivateMb: number;
 }
 
 /** One budget comparison. */

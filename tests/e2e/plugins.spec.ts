@@ -1,54 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ElectronApplication, Page } from '@playwright/test';
-import axe from 'axe-core';
 import { makePackage } from '../helpers/zip';
 import { expect, test } from './fixtures';
 import { TEST_CLIENT_ID, inHost, logEntries, stubCommands, waitForPlayerReady } from './harness';
+import { offerPackage, pluginLog, pluginMessages, pluginProcesses, violations } from './plugin-helpers';
 
 /*
  * The plugin manager (#101) and safe mode (#50). Packages are built by the test and picked through the real file dialog
  * code, with Electron's dialog answered by the test. The restart buttons are not clicked: app.relaunch() would start a
  * copy of Playlish outside the test's control (the flag they pass is unit tested in relaunchArgs).
  */
-
-/** Writes a package next to the profile and makes the next file dialog pick it. */
-async function offerPackage(app: ElectronApplication, userDataDir: string, name: string, data: Buffer): Promise<void> {
-  const file = path.join(path.dirname(userDataDir), `${path.basename(userDataDir)}-${name}`);
-  fs.writeFileSync(file, data);
-  await app.evaluate(({ dialog }, picked) => {
-    dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [picked] });
-  }, file);
-}
-
-/** How many plugin-host processes run (it only exists while a plugin is on). */
-async function pluginProcesses(app: ElectronApplication): Promise<number> {
-  return app.evaluate(({ app: a }) => a.getAppMetrics().filter((m) => m.type === 'Utility' && m.name === 'Playlish plugins').length);
-}
-
-/** Lines the plugins wrote to plugins.log. */
-function pluginLog(userDataDir: string): string {
-  const file = path.join(userDataDir, 'logs', 'plugins.log');
-  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-}
-
-/** The messages in plugins.log, one per line (the file is JSON lines). */
-function pluginMessages(userDataDir: string): string[] {
-  return pluginLog(userDataDir)
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => (JSON.parse(line) as { msg: string }).msg);
-}
-
-/** WCAG A and AA violations on the page, as readable lines. */
-async function violations(page: Page): Promise<string[]> {
-  await page.evaluate(axe.source);
-  const results = await page.evaluate(() =>
-    (window as unknown as { axe: typeof axe }).axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } }),
-  );
-  return results.violations.map((v) => `${v.id}: ${v.help} — ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
-}
 
 const HELLO = "playlish.log('hello from the sandbox');";
 const row = '#plugin-com-example-hello';

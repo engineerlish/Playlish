@@ -7,7 +7,7 @@
 export const PLUGIN_PERMISSIONS = {
   'playback.read': 'See what is playing and on which device',
   'playback.control': 'Control playback: play, pause, skip and add to the queue',
-  'library.read': 'Read your library: liked songs, saved albums and playlists',
+  'library.read': 'Read your library and listening history: liked songs, playlists and recently played',
   'library.modify': 'Change your library: save and remove songs and albums',
   'audio.control': 'Change the volume and the equalizer',
   storage: 'Keep a small amount of its own data on this computer (deleted when you uninstall it)',

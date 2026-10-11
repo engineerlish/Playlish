@@ -1,0 +1,11 @@
+{
+  "id": "io.github.engineerlish.smart-shuffle",
+  "name": "Smart shuffle",
+  "version": "1.0.0",
+  "author": "Playlish",
+  "description": "Queues a mix from your liked songs: no songs from your last mixes, and never two songs by the same artist in a row.",
+  "apiVersion": 1,
+  "permissions": ["library.read", "playback.control", "storage"],
+  "entry": "main.js",
+  "ui": ["plugins-page"]
+}
