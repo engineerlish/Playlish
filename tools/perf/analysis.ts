@@ -27,6 +27,11 @@ export interface Budgets {
   soakMaxGrowthPercent: number;
   /** Added to the memory budgets when plugins are on (the plugin-host process; #82, #105). */
   pluginHostPrivateMb: number;
+  /** While real playback runs, checked by the smoke test (docs/PROPOSAL.md section 2; #10). */
+  playingHiddenPrivateMb: number;
+  playingUiOpenPrivateMb: number;
+  playingHiddenCpuPercent: number;
+  playingUiOpenCpuPercent: number;
 }
 
 /** One budget comparison. */

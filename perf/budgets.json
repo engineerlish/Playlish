@@ -1,5 +1,5 @@
 {
-  "$comment": "Budgets from docs/PROPOSAL.md section 2. Memory is private bytes summed over all app processes. uiOpenPrivateMb is the UI window open while not playing (the proposal's 300 MB is for open and playing). trayAfterUiPrivateMb is the tray after the window has been used, checked on the soak's window-closed samples: Chromium keeps about 10 MB of native memory once it has drawn a window (#34, approved 2026-10-04), and the main process's native memory grows for about 35 minutes of window open/close cycles before it levels off at about 100 MB (raised from 95 to 105 MB, #108, approved 2026-10-08). pluginHostPrivateMb is added to the memory budgets when the example plugins are on (--plugins): the plugin-host process, about 120 MB idle with plugins against 80 without (#82, #105, approved 2026-10-11).",
+  "$comment": "Budgets from docs/PROPOSAL.md section 2. Memory is private bytes summed over all app processes. uiOpenPrivateMb is the UI window open while not playing (the proposal's 300 MB is for open and playing). trayAfterUiPrivateMb is the tray after the window has been used, checked on the soak's window-closed samples: Chromium keeps about 10 MB of native memory once it has drawn a window (#34, approved 2026-10-04), and the main process's native memory grows for about 35 minutes of window open/close cycles before it levels off at about 100 MB (raised from 95 to 105 MB, #108, approved 2026-10-08). pluginHostPrivateMb is added to the memory budgets when the example plugins are on (--plugins): the plugin-host process, about 120 MB idle with plugins against 80 without (#82, #105, approved 2026-10-11). The playing* budgets are checked by the smoke test with real playback (docs/PROPOSAL.md section 2): window hidden at most 200 MB and 2% CPU, window open at most 300 MB and 5% CPU.",
   "idleTrayPrivateMb": 80,
   "trayAfterUiPrivateMb": 105,
   "uiOpenPrivateMb": 150,
@@ -7,5 +7,9 @@
   "coldStartTrayMs": 1500,
   "coldStartUiMs": 2500,
   "soakMaxGrowthPercent": 5,
-  "pluginHostPrivateMb": 40
+  "pluginHostPrivateMb": 40,
+  "playingHiddenPrivateMb": 200,
+  "playingUiOpenPrivateMb": 300,
+  "playingHiddenCpuPercent": 2,
+  "playingUiOpenCpuPercent": 5
 }
