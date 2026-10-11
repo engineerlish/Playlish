@@ -10,3 +10,6 @@ e2e-results/
 e2e-report/
 release/
 build/
+
+# Packed plugins (npm run plugin:pack)
+*.playlish

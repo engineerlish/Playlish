@@ -1,0 +1,11 @@
+{
+  "id": "io.github.engineerlish.listening-stats",
+  "name": "Listening stats",
+  "version": "1.0.0",
+  "author": "Playlish",
+  "description": "Your top artists and tracks from the songs you played recently, below the sidebar.",
+  "apiVersion": 1,
+  "permissions": ["library.read", "playback.read"],
+  "entry": "main.js",
+  "ui": ["sidebar"]
+}

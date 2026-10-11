@@ -64,6 +64,8 @@ beforeEach(() => {
   spotify = {
     play: ok(), pause: ok(), next: ok(), previous: ok(), volume: ok(), addToQueue: ok(), saveToLibrary: ok(), removeFromLibrary: ok(),
     savedTracks: vi.fn().mockResolvedValue({ total: 1, offset: 0, limit: 50, next: null, items: [{ added_at: '2026-10-01T00:00:00Z', track: { uri: TRACK, name: 'Liked', artists: [{ name: 'A' }, { name: 'B' }], album: { name: 'Album' }, duration_ms: 1234 } }] }),
+    playlists: vi.fn().mockResolvedValue({ total: 1, offset: 0, limit: 50, next: null, items: [{ uri: 'spotify:playlist:p1', name: 'Gym', items: { total: 12, href: '' } }] }),
+    recentlyPlayed: vi.fn().mockResolvedValue({ items: [{ played_at: '2026-10-10T10:00:00Z', track: { uri: TRACK, name: 'Recent', artists: [{ name: 'A' }], album: { name: 'Al' }, duration_ms: 99 } }] }),
     search: vi.fn().mockResolvedValue({ tracks: { items: [{ uri: TRACK, name: 'Found', artists: [{ name: 'A' }] }] }, playlists: { items: [null, { uri: 'spotify:playlist:p1', name: 'List' }] } }),
   };
   view = playing();
@@ -191,6 +193,21 @@ describe('library, search and the equalizer', () => {
     expect(spotify.savedTracks).toHaveBeenCalledWith(50, 10, 'background');
     expect(liked).toEqual({ total: 1, offset: 0, items: [{ uri: TRACK, name: 'Liked', artists: ['A', 'B'], album: 'Album', durationMs: 1234, addedAt: '2026-10-01T00:00:00Z' }] });
     await expect(api().call('full', 'library.liked', { limit: 51 })).rejects.toThrow(/from 1 to 50/);
+  });
+
+  it('lists playlists and recently played tracks with library.read, at background priority', async () => {
+    expect(await api().call('full', 'library.playlists', null)).toEqual({ total: 1, offset: 0, items: [{ uri: 'spotify:playlist:p1', name: 'Gym', tracks: 12 }] });
+    expect(spotify.playlists).toHaveBeenCalledWith(0, 50, 'background');
+    expect(await api().call('full', 'history.recent', { limit: 20 })).toEqual([{ uri: TRACK, name: 'Recent', artists: ['A'], album: 'Al', durationMs: 99, playedAt: '2026-10-10T10:00:00Z' }]);
+    expect(spotify.recentlyPlayed).toHaveBeenCalledWith(20, 'background');
+    await expect(api().call('reader', 'history.recent', null)).rejects.toThrow(/library.read/);
+  });
+
+  it('tells plugins what the music plays from', async () => {
+    view = playing({ contextUri: 'spotify:playlist:p1' });
+    expect(await api().call('reader', 'playback.get', null)).toMatchObject({ context: 'spotify:playlist:p1' });
+    view = playing();
+    expect(await api().call('reader', 'playback.get', null)).toMatchObject({ context: null });
   });
 
   it('search needs no permission, runs at background priority, and drops empty results', async () => {

@@ -8,7 +8,8 @@
 //   __stub.emit(event, payload)   fires any SDK event, such as 'playback_error' or 'account_error'
 //   __stub.state()                the current state (as getCurrentState would return it)
 //   __stub.freeze()               stops the position from advancing, to simulate a stalled player
-//   __stub.set({ shuffle, repeat }) changes shuffle or repeat (0 off, 1 context, 2 track), as Spotify would report it
+//   __stub.set({ shuffle, repeat, context }) changes shuffle, repeat (0 off, 1 context, 2 track) or the playing context
+//                                 (an album or playlist URI, or null), as Spotify would report it
 (() => {
   // CHANGE HERE: what the fake tracks are called and how long they are.
   const TRACKS = ['E2E Song One', 'E2E Song Two', 'E2E Song Three'];
@@ -23,6 +24,7 @@
   let volume = 0.5;
   let shuffle = false;
   let repeatMode = 0;
+  let contextUri = null;
 
   function emit(event, payload) {
     for (const callback of listeners.get(event) ?? []) callback(payload);
@@ -42,6 +44,7 @@
       duration: DURATION_MS,
       shuffle,
       repeat_mode: repeatMode,
+      context: contextUri ? { uri: contextUri } : null,
       track_window: {
         current_track: {
           name: TRACKS[trackIndex],
@@ -155,6 +158,7 @@
     set(changes) {
       if ('shuffle' in changes) shuffle = changes.shuffle;
       if ('repeat' in changes) repeatMode = changes.repeat;
+      if ('context' in changes) contextUri = changes.context;
       emit('player_state_changed', state());
     },
     freeze() {

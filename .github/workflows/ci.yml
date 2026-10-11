@@ -190,6 +190,10 @@ jobs:
       - name: UI open
         run: node tools/perf/run.ts --scenario ui --out perf-ui.json --no-fail
 
+      # With the example plugins on (#104). Report only until the owner settles the allowance for the plugin process.
+      - name: Idle tray with plugins
+        run: node tools/perf/run.ts --scenario idle --plugins --advisory --out perf-idle-plugins.json --no-fail
+
       - name: Baseline from main
         if: github.event_name == 'pull_request'
         shell: bash

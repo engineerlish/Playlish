@@ -17,6 +17,8 @@ interface SpotifySdkState {
   /** 0 off, 1 repeat the context, 2 repeat the track. */
   repeat_mode?: number;
   track_window: { current_track: SpotifyTrack };
+  /** What it plays from (an album, playlist, artist or show), when there is one. */
+  context?: { uri?: string | null } | null;
 }
 interface SpotifyPlayer {
   connect(): Promise<boolean>;
@@ -91,6 +93,7 @@ function toPlaybackState(state: SpotifySdkState | null): PlaybackState | null {
     shuffle: state.shuffle ?? false,
     repeat: REPEAT_MODES[state.repeat_mode ?? 0] ?? 'off',
     muted,
+    contextUri: state.context?.uri || null,
   };
 }
 

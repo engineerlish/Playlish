@@ -31,6 +31,11 @@ export default tseslint.config(
     files: ['tests/e2e/fixtures/**/*.js'],
     languageOptions: { sourceType: 'script', globals: { window: 'readonly', setTimeout: 'readonly' } },
   },
+  // Example plugins (#104): one script each, run in the plugin sandbox, where the only global is `playlish`.
+  {
+    files: ['examples/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: { playlish: 'readonly' } },
+  },
   // Plain JS/config files: no type information.
   {
     files: ['**/*.mjs', '**/*.cjs', '**/*.config.ts', '**/*.config.mts'],

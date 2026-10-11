@@ -111,6 +111,12 @@ export interface Queue {
   queue: PlayableItem[];
 }
 
+/** One entry of GET /me/player/recently-played. */
+export interface PlayHistory {
+  track: Track;
+  played_at: string;
+}
+
 export interface SavedTrack {
   added_at: string;
   track: Track;

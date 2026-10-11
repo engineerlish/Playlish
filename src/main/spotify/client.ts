@@ -5,6 +5,7 @@ import type {
   CurrentUser,
   Device,
   Paging,
+  PlayHistory,
   PlaybackState,
   PlaylistItem,
   Queue,
@@ -238,6 +239,18 @@ export class SpotifyClient {
   savedAlbums(offset = 0, limit = MAX_PAGE, priority: Priority = 'visible'): Promise<Paging<SavedAlbum>> {
     const l = clampLimit(limit, MAX_PAGE);
     return this.request({ method: 'GET', path: '/me/albums', endpoint: 'GET /me/albums', priority, query: { offset, limit: l }, cacheKey: `library:albums:${offset}:${l}`, ttlMs: TTL.library, validate: paging<SavedAlbum>('GET /me/albums') });
+  }
+
+  /** The most recently played tracks, newest first (at most 50; needs user-read-recently-played). Never cached. */
+  recentlyPlayed(limit = MAX_PAGE, priority: Priority = 'background'): Promise<{ items: PlayHistory[] }> {
+    const l = clampLimit(limit, MAX_PAGE);
+    return this.request({
+      method: 'GET', path: '/me/player/recently-played', endpoint: 'GET /me/player/recently-played', priority, query: { limit: l },
+      validate: (v) => {
+        if (!isObject(v) || !Array.isArray(v['items'])) throw new MalformedResponseError('GET /me/player/recently-played', 'no items');
+        return v as unknown as { items: PlayHistory[] };
+      },
+    });
   }
 
   playlists(offset = 0, limit = MAX_PAGE, priority: Priority = 'visible'): Promise<Paging<SimplifiedPlaylist>> {

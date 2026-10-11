@@ -50,6 +50,7 @@ export function fromSdk(state: PlaybackState): NowPlaying {
     repeat: state.repeat,
     volume: state.volume,
     muted: state.muted,
+    contextUri: state.contextUri ?? null,
   };
 }
 
@@ -77,6 +78,7 @@ export function fromWebApi(state: ApiPlaybackState | null, ownDeviceId: string |
     volume: percent === null ? null : percent / 100,
     // Muted by Playlish: volume 0 with a remembered volume to go back to.
     muted: percent === 0 && mutedVolume !== null,
+    contextUri: state.context?.uri ?? null,
   };
 }
 

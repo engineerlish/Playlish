@@ -1,0 +1,11 @@
+{
+  "id": "com.example.my-plugin",
+  "name": "My plugin",
+  "version": "0.1.0",
+  "author": "Your name",
+  "description": "What it does, in one sentence.",
+  "apiVersion": 1,
+  "permissions": ["playback.read", "storage"],
+  "entry": "main.js",
+  "ui": ["plugins-page"]
+}

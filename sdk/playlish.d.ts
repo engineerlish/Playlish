@@ -28,6 +28,8 @@ declare namespace Playlish {
     repeat: 'off' | 'context' | 'track';
     /** 0 to 1, or null when the device has no volume control. */
     volume: number | null;
+    /** What it plays from: an album, playlist, artist or show URI, or null. */
+    context: string | null;
   }
 
   interface Track {
@@ -89,6 +91,10 @@ declare namespace Playlish {
     'library.save': { args: { uris: string[]; remove?: boolean }; result: null };
     /** "library.read", Spotify: a page of liked songs, newest first (limit 1 to 50). */
     'library.liked': { args?: { offset?: number; limit?: number } | null; result: { total: number; offset: number; items: (Track & { addedAt: string })[] } };
+    /** "library.read", Spotify: a page of your playlists (limit 1 to 50). */
+    'library.playlists': { args?: { offset?: number; limit?: number } | null; result: { total: number; offset: number; items: { uri: string; name: string; tracks: number }[] } };
+    /** "library.read", Spotify: recently played tracks, newest first (limit 1 to 50). */
+    'history.recent': { args?: { limit?: number } | null; result: (Track & { playedAt: string })[] };
     /** No permission, Spotify: search the catalog (limit 1 to 20, default 10). */
     search: { args: { query: string; type?: 'track' | 'album' | 'artist' | 'playlist'; limit?: number }; result: { uri: string; name: string; artists?: string[] }[] };
     /** "audio.control", Spotify when another device plays: 0 to 1. */
