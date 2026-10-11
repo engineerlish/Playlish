@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PLUGIN_ACTIONS, PLUGIN_EVENTS, PLUGIN_FLOOD_LIMIT, PLUGIN_RATE_PER_MINUTE, PluginApi, actionPermission, type PluginApiDeps, type PluginSpotify } from '../src/main/plugins/api';
+import { PLUGIN_ACTIONS, PLUGIN_EVENTS, PLUGIN_FLOOD_LIMIT, PLUGIN_RATE_PER_MINUTE, PLUGIN_UI_RATE_PER_MINUTE, PluginApi, actionPermission, type PluginApiDeps, type PluginSpotify } from '../src/main/plugins/api';
 import { PluginStorage } from '../src/main/plugins/storage';
 import { PLUGIN_PERMISSIONS, type PluginPermission } from '../src/shared/plugins';
 import type { NowPlaying, PlayerCommand } from '../src/shared/types';
@@ -20,6 +20,7 @@ let floods: string[];
 let queueChanges: number;
 let now: number;
 let eqCalls: string[];
+let panels: { id: string; slot: string; panel: unknown }[];
 
 function playing(overrides: Partial<NowPlaying> = {}): NowPlaying {
   return {
@@ -49,6 +50,8 @@ function api(overrides: Partial<PluginApiDeps> = {}) {
     storage: new PluginStorage(dir),
     onFlood: (id) => floods.push(id),
     onQueueChanged: () => queueChanges++,
+    uiSlots: (id) => (id === 'full' ? ['sidebar'] : []),
+    setPanel: (id, slot, panel) => panels.push({ id, slot, panel }),
     now: () => now,
     ...overrides,
   });
@@ -70,6 +73,7 @@ beforeEach(() => {
   queueChanges = 0;
   now = 1_000_000;
   eqCalls = [];
+  panels = [];
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
@@ -91,8 +95,8 @@ describe('permissions', () => {
     expect(actionPermission('toString')).toBeUndefined();
   });
 
-  it('knows a permission for every action except search', () => {
-    for (const action of PLUGIN_ACTIONS) if (action !== 'search') expect(ALL, action).toContain(actionPermission(action));
+  it('knows a permission for every action except search and ui.set', () => {
+    for (const action of PLUGIN_ACTIONS) if (action !== 'search' && action !== 'ui.set') expect(ALL, action).toContain(actionPermission(action));
   });
 
   it('never hands out artwork URLs or device ids in playback data', async () => {
@@ -225,6 +229,31 @@ describe('storage', () => {
   });
 });
 
+describe('ui.set (#103)', () => {
+  it('shows a checked panel in a slot from the manifest, and removes it with null', async () => {
+    await api().call('full', 'ui.set', { slot: 'sidebar', panel: { title: 'Stats', items: [{ type: 'text', text: 'Hi' }] } });
+    await api().call('full', 'ui.set', { slot: 'sidebar', panel: null });
+    expect(panels).toEqual([
+      { id: 'full', slot: 'sidebar', panel: { title: 'Stats', items: [{ type: 'text', text: 'Hi', style: 'normal' }] } },
+      { id: 'full', slot: 'sidebar', panel: null },
+    ]);
+  });
+
+  it('refuses a slot the manifest does not list, and a panel that is not valid', async () => {
+    await expect(api().call('full', 'ui.set', { slot: 'plugins-page', panel: null })).rejects.toThrow(/UI slots in the plugin's manifest \(sidebar\)/);
+    await expect(api().call('reader', 'ui.set', { slot: 'sidebar', panel: null })).rejects.toThrow(/\(none\)/);
+    await expect(api().call('full', 'ui.set', { slot: 'sidebar', panel: { items: [{ type: 'html', html: '<img onerror=x>' }] } })).rejects.toThrow(/must have a type/);
+  });
+
+  it('has its own rate limit, apart from Spotify calls', async () => {
+    const a = api();
+    for (let i = 0; i < PLUGIN_UI_RATE_PER_MINUTE; i++) await a.call('full', 'ui.set', { slot: 'sidebar', panel: null });
+    await expect(a.call('full', 'ui.set', { slot: 'sidebar', panel: null })).rejects.toThrow(/panel updates a minute/);
+    here = false;
+    await expect(a.call('full', 'next', null)).resolves.toBeNull();
+  });
+});
+
 describe('rate limit', () => {
   it('allows 60 Spotify calls a minute, then refuses until the minute has passed', async () => {
     const a = api();
@@ -269,7 +298,7 @@ describe('the SDK definitions (sdk/playlish.d.ts)', () => {
       const comment = sdk.split('\n')[line - 1] ?? '';
       const permission = actionPermission(action);
       if (permission) expect(comment, action).toContain(`"${permission}"`);
-      else expect(comment, action).toContain('No permission');
+      else expect(comment, action).toMatch(/No permission/);
     }
   });
 });

@@ -38,12 +38,37 @@ declare namespace Playlish {
     durationMs: number;
   }
 
-  /** Events, all of them need "playback.read". `queue.changed` carries no data. */
+  /**
+   * A panel Playlish draws for the plugin (#103) with its own controls: no HTML, no plugin code in the window. At most
+   * 50 items; text up to 500 characters, labels up to 80; ids are 1 to 40 of A-Z a-z 0-9 _ - and unique in the panel.
+   */
+  interface Panel {
+    title?: string;
+    items: PanelItem[];
+  }
+
+  type PanelItem =
+    | { type: 'text'; text: string; style?: 'heading' | 'normal' | 'muted' }
+    | { type: 'list'; items: (string | { text: string; detail?: string })[] }
+    | { type: 'button'; id: string; label: string }
+    | { type: 'toggle'; id: string; label: string; value?: boolean }
+    | { type: 'slider'; id: string; label: string; min?: number; max?: number; step?: number; value?: number }
+    | { type: 'select'; id: string; label: string; options: (string | { value: string; label: string })[]; value?: string };
+
+  /** Where a panel goes; the plugin's manifest must list it under "ui". */
+  type Slot = 'plugins-page' | 'sidebar';
+
+  /**
+   * Events. The playback ones need "playback.read"; `queue.changed` carries no data. `ui.action` is a click or change
+   * in the plugin's own panel: no value for a button, true/false for a toggle, a number for a slider, the option's
+   * value for a select. Update the panel with ui.set to show the new state.
+   */
   interface Events {
     'track.changed': Playback | null;
     'playback.state': Playback | null;
     'device.changed': Playback | null;
     'queue.changed': null;
+    'ui.action': { slot: Slot; id: string; value: boolean | number | string | null };
   }
 
   /** Every action, with its arguments and its result. */
@@ -83,6 +108,8 @@ declare namespace Playlish {
     'storage.delete': { args: { key: string }; result: null };
     /** "storage": every key, sorted. */
     'storage.keys': { args?: null; result: string[] };
+    /** No permission (the slot must be in the manifest): show a panel in a slot, or remove it with null. At most 120 a minute. */
+    'ui.set': { args: { slot: Slot; panel: Panel | null }; result: null };
   }
 
   type ActionName = keyof Actions;

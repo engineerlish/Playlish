@@ -54,3 +54,29 @@ export interface PluginPrompt {
   /** SHA-256 of the package file, in hex. */
   sha256: string;
 }
+
+/*
+ * Declarative plugin UI (#103): a plugin describes a panel and Playlish draws it with its own components, so no plugin
+ * code ever runs in the window. Interactions go back to the plugin as "ui.action" events.
+ */
+
+export type PanelNode =
+  | { type: 'text'; text: string; style: 'heading' | 'normal' | 'muted' }
+  | { type: 'list'; items: { text: string; detail: string }[] }
+  | { type: 'button'; id: string; label: string }
+  | { type: 'toggle'; id: string; label: string; value: boolean }
+  | { type: 'slider'; id: string; label: string; min: number; max: number; step: number; value: number }
+  | { type: 'select'; id: string; label: string; options: { value: string; label: string }[]; value: string };
+
+export interface Panel {
+  title: string;
+  items: PanelNode[];
+}
+
+/** A panel as the window gets it: whose it is and where it goes. */
+export interface PluginPanelView {
+  pluginId: string;
+  pluginName: string;
+  slot: PluginUiSlot;
+  panel: Panel;
+}

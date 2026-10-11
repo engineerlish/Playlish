@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { PLUGIN_PERMISSIONS, type PluginPrompt, type PluginView } from '../../../shared/plugins';
 import type { Snapshot } from '../../../shared/types';
+import { PluginPanel } from '../PluginPanel';
 
 /*
  * Plugins (#50, #101): the plugin manager. Install a .playlish file after a permission prompt, turn plugins on and off,
@@ -122,6 +123,13 @@ export function PluginsPage({ snapshot }: { snapshot: Snapshot }) {
         </div>
       )}
       {snapshot.pluginPrompt && <InstallPrompt prompt={snapshot.pluginPrompt} />}
+      {snapshot.pluginPanels
+        .filter((p) => p.slot === 'plugins-page')
+        .map((p) => (
+          <div key={p.pluginId} class="card">
+            <PluginPanel view={p} />
+          </div>
+        ))}
       <section class="card">
         <div class="row-head">
           <h2>Installed</h2>

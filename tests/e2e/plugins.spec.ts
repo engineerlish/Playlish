@@ -161,6 +161,49 @@ test.describe('plugins', () => {
     expect(pluginMessages(userDataDir)).toContain('"library.save" needs the "library.modify" permission, which this plugin was not given.');
   });
 
+  test('UI (#103): a plugin panel is drawn by Playlish, and clicks go back to the plugin', async ({ start }) => {
+    const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID });
+    await ui.click('#nav-plugins');
+    const code = `
+      let clicks = 0;
+      let on = false;
+      function draw() {
+        return playlish.call('ui.set', { slot: 'sidebar', panel: { title: 'Counter', items: [
+          { type: 'text', text: '<b>Clicked ' + clicks + '</b>' },
+          { type: 'button', id: 'add', label: 'Add one' },
+          { type: 'toggle', id: 'on', label: 'Switch', value: on },
+        ] } });
+      }
+      playlish.on('ui.action', (action) => {
+        if (action.id === 'add') clicks++;
+        if (action.id === 'on') on = action.value;
+        playlish.log('action ' + action.id + ' ' + JSON.stringify(action.value));
+        return draw();
+      });
+      draw();
+    `;
+    await offerPackage(app, userDataDir, 'panel.playlish', makePackage({ permissions: [], ui: ['sidebar'] }, code));
+    await ui.click('#installPlugin');
+    await ui.click('#approvePlugin');
+
+    const panel = ui.locator('.sidebar-panels section[data-plugin="com.example.hello"]');
+    await expect(panel.locator('.pp-title')).toHaveText('Counter');
+    // Plugin text is text, never HTML.
+    await expect(panel.locator('p').first()).toHaveText('<b>Clicked 0</b>');
+    await expect(panel.locator('b')).toHaveCount(0);
+    expect(await violations(ui)).toEqual([]);
+
+    await panel.getByRole('button', { name: 'Add one' }).click();
+    await expect(panel.locator('p').first()).toHaveText('<b>Clicked 1</b>');
+    await panel.getByRole('checkbox', { name: 'Switch' }).check();
+    await expect.poll(() => pluginMessages(userDataDir)).toContain('action on true');
+    await expect(panel.getByRole('checkbox', { name: 'Switch' })).toBeChecked();
+
+    // Turned off: its panel goes away.
+    await ui.locator(`${row} .plugin-enabled`).uncheck();
+    await expect(ui.locator('.sidebar-panels')).toHaveCount(0);
+  });
+
   test('a plugin that floods the API is turned off, and Playlish keeps working', async ({ start }) => {
     const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID });
     await ui.click('#login');
