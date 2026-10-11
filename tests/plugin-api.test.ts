@@ -252,7 +252,8 @@ describe('rate limit', () => {
 });
 
 describe('the SDK definitions (sdk/playlish.d.ts)', () => {
-  const sdk = fs.readFileSync(path.join(__dirname, '..', 'sdk', 'playlish.d.ts'), 'utf8');
+  // Line endings depend on the checkout (CRLF on Windows CI).
+  const sdk = fs.readFileSync(path.join(__dirname, '..', 'sdk', 'playlish.d.ts'), 'utf8').replace(/\r\n/g, '\n');
   const block = (name: string) => sdk.slice(sdk.indexOf(`interface ${name} {`), sdk.indexOf('\n  }\n', sdk.indexOf(`interface ${name} {`)));
 
   it('describe exactly the actions and events the API has', () => {
