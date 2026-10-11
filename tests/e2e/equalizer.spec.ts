@@ -53,6 +53,25 @@ test.describe('equalizer', () => {
     fs.rmSync(apo.dir, { recursive: true, force: true });
   });
 
+  test('the equalizer follows the output device (#12)', async ({ start }) => {
+    const apo = fakeApo();
+    const { ui } = await start({ clientId: TEST_CLIENT_ID, eqDir: apo.dir });
+    await ui.click('#nav-settings');
+    await ui.check('#eqEnabled');
+    await ui.selectOption('#eqPreset', 'vocal');
+    const deviceLine = () => (fs.existsSync(apo.own) ? (fs.readFileSync(apo.own, 'utf8').split(/\r?\n/).find((l) => l.startsWith('Device:')) ?? '') : '');
+
+    await ui.evaluate(() => (window as unknown as { ui: { setOutput(n: string | null): void } }).ui.setOutput('E2E Headphones (USB)'));
+    await expect.poll(deviceLine).toBe('Device: E2E Headphones (USB)');
+
+    await ui.evaluate(() => (window as unknown as { ui: { setOutput(n: string | null): void } }).ui.setOutput(null));
+    await expect.poll(deviceLine).not.toContain('E2E Headphones');
+    // The preset stays as it was.
+    expect(fs.readFileSync(apo.own, 'utf8')).toContain('Preamp:');
+    await expect(ui.locator('#eqPreset')).toHaveValue('vocal');
+    fs.rmSync(apo.dir, { recursive: true, force: true });
+  });
+
   test('a config folder Playlish cannot write asks for the one-time Windows permission', async ({ start }) => {
     const apo = fakeApo();
     fs.chmodSync(apo.config, 0o444); // read-only, like Program Files for a normal user
