@@ -42,6 +42,9 @@ Useful switches: `--tray` (start in the tray), `--safe-mode` (all plugins off), 
 
 - In-app: the Resources panel, and the CSV log at `%APPDATA%\Playlish\perf.csv` (sampled every 5 s).
 - External cross-check: `powershell -File scripts\measure.ps1 -Seconds 30`
+- Against the budgets in `perf/budgets.json`: `npm run perf:idle`, `npm run perf:ui`, `npm run perf:soak`. Add `--plugins` (with `node tools/perf/run.ts`) to run with the example plugins on.
+- RAM and CPU during real playback (window open, then closed to the tray) are checked by `npm run smoke`.
+- History: `node tools/perf/history.ts` prints the measurements of recent CI and nightly runs side by side (needs the GitHub CLI).
 
 ## 5. Build the installer
 

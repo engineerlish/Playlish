@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline/promises';
 import { buildIssue, type FailureReport } from '../issues/format.ts';
 import { fileFailure } from '../issues/github.ts';
+import { parsePerfCsv, type Budgets } from '../perf/analysis.ts';
 import { click, evaluate, setRange } from './cdp.ts';
 
 type Status = 'pass' | 'fail' | 'skipped' | 'not-available';
@@ -279,6 +280,7 @@ async function playbackChecks(): Promise<void> {
   await checkOutputDevice();
   await checkEqualizer();
   await checkTransfer();
+  await checkPlayingResources();
 
   // The login must survive a restart (a bug once deleted the stored session on every start).
   stopApp();
@@ -294,6 +296,65 @@ async function playbackChecks(): Promise<void> {
     area: 'auth',
     severity: 'high',
   });
+}
+
+// CHANGE HERE: how long resource use is sampled in each state (the app samples every 5 s into perf.csv).
+const RESOURCE_WINDOW_MS = 30_000;
+
+/** The app's own samples (perf.csv in the profile) taken since `since`, while playing, with the window open or not. */
+function playingSamples(since: number, uiOpen: boolean): { privateAvg: number; privateMax: number; cpuAvg: number; count: number } | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(profile, 'perf.csv'), 'utf8');
+  } catch {
+    return null;
+  }
+  const samples = parsePerfCsv(text).filter((s) => Date.parse(s.time) >= since && s.playing === true && s.uiOpen === uiOpen);
+  if (samples.length === 0) return null;
+  const avg = (f: (s: (typeof samples)[number]) => number) => samples.reduce((sum, s) => sum + f(s), 0) / samples.length;
+  return {
+    privateAvg: Math.round(avg((s) => s.privateMb) * 10) / 10,
+    privateMax: Math.round(Math.max(...samples.map((s) => s.privateMb)) * 10) / 10,
+    cpuAvg: Math.round(avg((s) => s.cpuPercent) * 100) / 100,
+    count: samples.length,
+  };
+}
+
+/**
+ * RAM and CPU during real playback (#10, budgets from docs/PROPOSAL.md section 2): with the window open, then closed to
+ * the tray. Read from the app's own perf.csv, which covers every Playlish process. Comes last before the restart, since
+ * the window is closed at the end.
+ */
+async function checkPlayingResources(): Promise<void> {
+  const budgets = JSON.parse(fs.readFileSync(path.join(ROOT, 'perf', 'budgets.json'), 'utf8')) as Budgets;
+  const measure = async (uiOpen: boolean, name: string, mb: number, cpu: number) => {
+    const since = Date.now();
+    await sleep(RESOURCE_WINDOW_MS);
+    const r = playingSamples(since, uiOpen);
+    if (!r) {
+      record({ id: uiOpen ? 'resources-open' : 'resources-hidden', name, status: 'fail', details: 'No samples while playing (is it still playing here?)', area: 'player', severity: 'medium' });
+      return;
+    }
+    const ok = r.privateAvg <= mb && r.cpuAvg <= cpu;
+    record({
+      id: uiOpen ? 'resources-open' : 'resources-hidden',
+      name,
+      status: ok ? 'pass' : 'fail',
+      details: `private avg ${r.privateAvg} MB (max ${r.privateMax}), CPU avg ${r.cpuAvg}% over ${r.count} samples; budget ${mb} MB, ${cpu}%`,
+      area: 'player',
+      severity: 'medium',
+    });
+  };
+  await measure(true, 'RAM and CPU while playing, window open', budgets.playingUiOpenPrivateMb, budgets.playingUiOpenCpuPercent);
+
+  // Closing the window with "keep running in the tray" off would quit Playlish.
+  const prefs = (await evaluate(DEVTOOLS_PORT, '/ui.html', `new Promise((resolve) => { window.ui.onSnapshot((s) => resolve(s.preferences)); window.ui.requestSnapshot(); })`)) as { closeToTray: boolean } | null;
+  if (!prefs?.closeToTray) {
+    record({ id: 'resources-hidden', name: 'RAM and CPU while playing, window closed', status: 'skipped', details: '"Keep running in the tray" is off', area: 'player', severity: 'low' });
+    return;
+  }
+  await evaluate(DEVTOOLS_PORT, '/ui.html', 'window.close(), true');
+  await measure(false, 'RAM and CPU while playing, window closed', budgets.playingHiddenPrivateMb, budgets.playingHiddenCpuPercent);
 }
 
 /** Runs tools/smoke/media-overlay.ps1 for the given track title. */
