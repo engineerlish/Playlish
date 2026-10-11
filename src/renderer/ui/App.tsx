@@ -49,7 +49,7 @@ export function App() {
   const current = page ?? snapshot.lastPage;
   return (
     <div class="shell">
-      <Sidebar current={current} onNavigate={navigate} />
+      <Sidebar current={current} onNavigate={navigate} panels={snapshot.pluginPanels.filter((p) => p.slot === 'sidebar')} />
       <main id="content" class="content" tabIndex={-1} aria-label={current}>
         <div id="status" class="status" role="status">
           {snapshot.status}

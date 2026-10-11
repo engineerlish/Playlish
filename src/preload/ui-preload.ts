@@ -25,6 +25,7 @@ const api: UiApi = {
   setPluginEnabled: (id, enabled) => ipcRenderer.send('ui:plugin-enable', id, enabled),
   uninstallPlugin: (id) => ipcRenderer.send('ui:plugin-uninstall', id),
   dismissPluginError: () => ipcRenderer.send('ui:plugin-dismiss-error'),
+  pluginUiAction: (pluginId, slot, id, value) => ipcRenderer.send('ui:plugin-ui-action', pluginId, slot, id, value),
   library: (list, offset) => ipcRenderer.invoke('ui:library', list, offset) as Promise<LibraryResult>,
   libraryAction: (action) => ipcRenderer.invoke('ui:library-action', action) as Promise<ActionResult>,
   search: (query, kind, offset) => ipcRenderer.invoke('ui:search', query, kind, offset) as Promise<LibraryResult>,

@@ -1,7 +1,8 @@
-import type { PluginPermission } from '../../shared/plugins';
+import type { Panel, PluginPermission, PluginUiSlot } from '../../shared/plugins';
 import type { NowPlaying, PlayerCommand } from '../../shared/types';
 import type { PlayOptions } from '../spotify/client';
 import type { Paging, SavedTrack, SearchResults, SearchType } from '../spotify/types';
+import { PanelError, parsePanel } from './panel';
 import { StorageError, type PluginStorage } from './storage';
 
 /*
@@ -17,8 +18,10 @@ import { StorageError, type PluginStorage } from './storage';
  * first, and plugins never see a token: they get plain data back.
  */
 
-// CHANGE HERE: calls to Spotify a plugin may make per minute, and refused calls in a minute after which it is turned off.
+// CHANGE HERE: calls to Spotify and panel updates a plugin may make per minute, and refused calls in a minute after which
+// it is turned off.
 export const PLUGIN_RATE_PER_MINUTE = 60;
+export const PLUGIN_UI_RATE_PER_MINUTE = 120;
 export const PLUGIN_FLOOD_LIMIT = 120;
 const MINUTE_MS = 60_000;
 const MAX_URIS = 50;
@@ -26,9 +29,10 @@ const MAX_QUERY = 100;
 const MAX_SEARCH_RESULTS = 20;
 const MAX_LIKED_PAGE = 50;
 
-/** Events a plugin can listen to; all of them need "playback.read". */
-export const PLUGIN_EVENTS = ['track.changed', 'playback.state', 'queue.changed', 'device.changed'] as const;
-export type PluginEvent = (typeof PLUGIN_EVENTS)[number];
+/** Events a plugin can listen to. The playback ones need "playback.read"; "ui.action" comes from the plugin's own panel. */
+export const PLAYBACK_EVENTS = ['track.changed', 'playback.state', 'queue.changed', 'device.changed'] as const;
+export const PLUGIN_EVENTS = [...PLAYBACK_EVENTS, 'ui.action'] as const;
+export type PluginEvent = (typeof PLAYBACK_EVENTS)[number];
 export const EVENT_PERMISSION: PluginPermission = 'playback.read';
 
 export class PluginApiError extends Error {
@@ -70,6 +74,10 @@ export interface PluginApiDeps {
   onFlood(pluginId: string): void;
   /** A queue change made by a plugin, so listeners hear about it (queue.changed). */
   onQueueChanged(): void;
+  /** The UI slots in the plugin's manifest (#103). */
+  uiSlots(pluginId: string): PluginUiSlot[];
+  /** Shows (or with null, removes) a plugin's panel in a slot. */
+  setPanel(pluginId: string, slot: PluginUiSlot, panel: Panel | null): void;
   now?: () => number;
 }
 
@@ -81,8 +89,8 @@ interface ActionContext {
 interface ActionDef {
   /** The permission it needs, or null for none (searching the public catalog). */
   permission: PluginPermission | null;
-  /** True when it reaches Spotify and counts toward the rate limit. */
-  spotify: boolean;
+  /** The rate limit it counts toward: Spotify calls, panel updates, or none (local and cheap). */
+  limit: 'spotify' | 'ui' | null;
   /** Returns the result, or a promise of it. */
   run(args: Record<string, unknown>, ctx: ActionContext): unknown;
 }
@@ -173,12 +181,12 @@ function spotifyOf(ctx: ActionContext): PluginSpotify {
 const ACTIONS: Record<string, ActionDef> = {
   'playback.get': {
     permission: 'playback.read',
-    spotify: false,
+    limit: null,
     run: (_args, ctx) => playbackForPlugins(ctx.deps.playback.view()),
   },
   play: {
     permission: 'playback.control',
-    spotify: true,
+    limit: 'spotify',
     run: async (args, ctx) => {
       const options: PlayOptions = {};
       if (args['uris'] !== undefined) options.uris = uriList(args['uris'], 'uris', ['track', 'episode']);
@@ -193,18 +201,18 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   pause: {
     permission: 'playback.control',
-    spotify: true,
+    limit: 'spotify',
     run: (_args, ctx) => {
       const view = ctx.deps.playback.view();
       if (view?.paused) return null;
       return control(ctx, { type: 'toggle' }, (s, d) => s.pause(d));
     },
   },
-  next: { permission: 'playback.control', spotify: true, run: (_args, ctx) => control(ctx, { type: 'next' }, (s, d) => s.next(d)) },
-  previous: { permission: 'playback.control', spotify: true, run: (_args, ctx) => control(ctx, { type: 'previous' }, (s, d) => s.previous(d)) },
+  next: { permission: 'playback.control', limit: 'spotify', run: (_args, ctx) => control(ctx, { type: 'next' }, (s, d) => s.next(d)) },
+  previous: { permission: 'playback.control', limit: 'spotify', run: (_args, ctx) => control(ctx, { type: 'previous' }, (s, d) => s.previous(d)) },
   'queue.add': {
     permission: 'playback.control',
-    spotify: true,
+    limit: 'spotify',
     run: async (args, ctx) => {
       const target = uri(args['uri'], 'uri', ['track', 'episode']);
       await spotifyOf(ctx).addToQueue(target, ctx.deps.playback.targetDeviceId() ?? undefined);
@@ -214,7 +222,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   'library.save': {
     permission: 'library.modify',
-    spotify: true,
+    limit: 'spotify',
     run: async (args, ctx) => {
       const uris = uriList(args['uris'], 'uris', ['track', 'album', 'episode', 'show']);
       if (args['remove'] !== undefined && typeof args['remove'] !== 'boolean') throw new PluginApiError('"remove" must be true or false.');
@@ -225,7 +233,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   'library.liked': {
     permission: 'library.read',
-    spotify: true,
+    limit: 'spotify',
     run: async (args, ctx) => {
       const offset = integer(args['offset'], 'offset', 0, 100_000, 0);
       const limit = integer(args['limit'], 'limit', 1, MAX_LIKED_PAGE, MAX_LIKED_PAGE);
@@ -246,7 +254,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   search: {
     permission: null,
-    spotify: true,
+    limit: 'spotify',
     run: async (args, ctx) => {
       const query = text(args['query'], 'query', MAX_QUERY);
       const type = args['type'] ?? 'track';
@@ -265,7 +273,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   'volume.set': {
     permission: 'audio.control',
-    spotify: true,
+    limit: 'spotify',
     run: (args, ctx) => {
       if (typeof args['value'] !== 'number' || !(args['value'] >= 0 && args['value'] <= 1)) throw new PluginApiError('"value" must be a number from 0 to 1.');
       const value = args['value'];
@@ -274,7 +282,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   'volume.fade': {
     permission: 'audio.control',
-    spotify: false,
+    limit: null,
     run: (_args, ctx) => {
       if (!ctx.deps.playback.playingHere()) throw new PluginApiError('Fading only works while this computer plays.');
       if (!ctx.deps.playback.sendToHost({ type: 'fadeToggle' })) throw new PluginApiError('The player on this computer is not running.');
@@ -283,7 +291,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   'eq.preset': {
     permission: 'audio.control',
-    spotify: false,
+    limit: null,
     run: async (args, ctx) => {
       const preset = args['preset'];
       if (typeof preset !== 'string' || preset === 'custom' || !ctx.deps.eqPresets.includes(preset)) {
@@ -292,10 +300,10 @@ const ACTIONS: Record<string, ActionDef> = {
       return { status: await ctx.deps.setEqPreset(preset) };
     },
   },
-  'storage.get': { permission: 'storage', spotify: false, run: (args, ctx) => ctx.deps.storage.get(ctx.pluginId, storageKey(args['key'])) },
+  'storage.get': { permission: 'storage', limit: null, run: (args, ctx) => ctx.deps.storage.get(ctx.pluginId, storageKey(args['key'])) },
   'storage.set': {
     permission: 'storage',
-    spotify: false,
+    limit: null,
     run: (args, ctx) => {
       ctx.deps.storage.set(ctx.pluginId, storageKey(args['key']), args['value']);
       return null;
@@ -303,13 +311,25 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   'storage.delete': {
     permission: 'storage',
-    spotify: false,
+    limit: null,
     run: (args, ctx) => {
       ctx.deps.storage.delete(ctx.pluginId, storageKey(args['key']));
       return null;
     },
   },
-  'storage.keys': { permission: 'storage', spotify: false, run: (_args, ctx) => ctx.deps.storage.keys(ctx.pluginId) },
+  'storage.keys': { permission: 'storage', limit: null, run: (_args, ctx) => ctx.deps.storage.keys(ctx.pluginId) },
+  'ui.set': {
+    permission: null,
+    limit: 'ui',
+    run: (args, ctx) => {
+      const slot = args['slot'];
+      if (typeof slot !== 'string' || !(ctx.deps.uiSlots(ctx.pluginId) as string[]).includes(slot)) {
+        throw new PluginApiError(`"slot" must be one of the UI slots in the plugin's manifest (${ctx.deps.uiSlots(ctx.pluginId).join(', ') || 'none'}).`);
+      }
+      ctx.deps.setPanel(ctx.pluginId, slot as PluginUiSlot, args['panel'] === null || args['panel'] === undefined ? null : parsePanel(args['panel']));
+      return null;
+    },
+  },
 };
 
 /** Every action name, for the SDK definitions and the docs. */
@@ -321,7 +341,7 @@ export function actionPermission(action: string): PluginPermission | null | unde
 }
 
 export class PluginApi {
-  /** Times of each plugin's Spotify calls and refused calls in the last minute. */
+  /** Times of each plugin's calls (per limit) and refused calls in the last minute. */
   private readonly calls = new Map<string, number[]>();
   private readonly refused = new Map<string, number[]>();
   private readonly now: () => number;
@@ -338,12 +358,12 @@ export class PluginApi {
     if (!granted) throw new PluginApiError('This plugin is not running.');
     if (def.permission && !granted.includes(def.permission)) throw new PluginApiError(`"${action}" needs the "${def.permission}" permission, which this plugin was not given.`);
     const input = object(args);
-    if (def.spotify) this.countCall(pluginId);
+    if (def.limit) this.countCall(pluginId, def.limit);
     try {
       return await def.run(input, { pluginId, deps: this.deps });
     } catch (err) {
       if (err instanceof PluginApiError) throw err;
-      if (err instanceof StorageError) throw new PluginApiError(err.message);
+      if (err instanceof StorageError || err instanceof PanelError) throw new PluginApiError(err.message);
       // Spotify and other failures: a short message, never a stack or anything from the request.
       throw new PluginApiError(`"${action}" failed: ${(err as Error).message.slice(0, 200)}`);
     }
@@ -351,25 +371,27 @@ export class PluginApi {
 
   /** Forgets a plugin's counters (turned off or uninstalled). */
   forget(pluginId: string): void {
-    this.calls.delete(pluginId);
-    this.refused.delete(pluginId);
+    for (const map of [this.calls, this.refused]) for (const key of [...map.keys()]) if (key.startsWith(`${pluginId}:`)) map.delete(key);
   }
 
-  /** Counts a call toward the rate limit, refusing it when the plugin is over, and reporting a flood. */
-  private countCall(pluginId: string): void {
+  /** Counts a call toward its rate limit, refusing it when the plugin is over, and reporting a flood. */
+  private countCall(pluginId: string, limit: 'spotify' | 'ui'): void {
+    // Plugin ids never contain ":", so the key is unambiguous.
+    const key = `${pluginId}:${limit}`;
+    const max = limit === 'spotify' ? PLUGIN_RATE_PER_MINUTE : PLUGIN_UI_RATE_PER_MINUTE;
     const now = this.now();
-    const recent = (this.calls.get(pluginId) ?? []).filter((t) => now - t < MINUTE_MS);
-    if (recent.length >= PLUGIN_RATE_PER_MINUTE) {
-      const refused = [...(this.refused.get(pluginId) ?? []).filter((t) => now - t < MINUTE_MS), now];
-      this.refused.set(pluginId, refused);
-      this.calls.set(pluginId, recent);
+    const recent = (this.calls.get(key) ?? []).filter((t) => now - t < MINUTE_MS);
+    if (recent.length >= max) {
+      const refused = [...(this.refused.get(key) ?? []).filter((t) => now - t < MINUTE_MS), now];
+      this.refused.set(key, refused);
+      this.calls.set(key, recent);
       if (refused.length >= PLUGIN_FLOOD_LIMIT) {
         this.forget(pluginId);
         this.deps.onFlood(pluginId);
       }
-      throw new PluginApiError(`Rate limit: at most ${PLUGIN_RATE_PER_MINUTE} Spotify calls a minute.`);
+      throw new PluginApiError(limit === 'spotify' ? `Rate limit: at most ${max} Spotify calls a minute.` : `Rate limit: at most ${max} panel updates a minute.`);
     }
     recent.push(now);
-    this.calls.set(pluginId, recent);
+    this.calls.set(key, recent);
   }
 }

@@ -198,3 +198,16 @@ ol.plain { list-style: none; margin: 0; padding: 0; }
 .perm-list { margin: 4px 0 8px; padding-left: 20px; }
 .badge.new { border-color: var(--accent); color: var(--accent); }
 .small { font-size: 12px; }
+
+/* Plugin panels (#103): drawn by Playlish from a plugin's description. */
+.plugin-panel { display: flex; flex-direction: column; gap: 6px; }
+.plugin-panel .pp-title { font-size: 14px; margin: 0; }
+.plugin-panel .pp-heading { font-size: 13px; margin: 4px 0 0; }
+.plugin-panel p { margin: 0; }
+.pp-list { margin: 0; padding-left: 20px; }
+.pp-field { display: flex; flex-direction: column; gap: 2px; }
+.pp-field select { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+.pp-from { font-size: 11px; }
+.sidebar-panels { margin-top: 12px; padding: 8px 6px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; font-size: 12px; }
+.sidebar-panels button { font-size: 12px; padding: 4px 8px; }
+@media (max-width: 640px) { .sidebar-panels { display: none; } }

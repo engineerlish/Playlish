@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { isPage } from '../shared/pages';
+import type { PluginPanelView } from '../shared/plugins';
 import type { PlaybackState, PlayerCommand, SetupAction, Snapshot } from '../shared/types';
 import { appInfo, initLogging } from './app-logging';
 import { Auth, SessionExpiredError } from './auth';
@@ -16,6 +17,7 @@ import { MetricsLogger } from './metrics';
 import { EVENT_PERMISSION, PluginApi } from './plugins/api';
 import { PluginEvents } from './plugins/events';
 import { PluginManager } from './plugins/manager';
+import { checkAction } from './plugins/panel';
 import { PluginStorage } from './plugins/storage';
 import { PluginHost } from './plugins/plugin-host';
 import { PluginStore } from './plugins/store';
@@ -204,6 +206,13 @@ function restrictPlaybackPermissions(): void {
 let plugins: PluginManager | null = null;
 let pluginHost: PluginHost | null = null;
 let pluginEvents: PluginEvents | null = null;
+/** Panels plugins show (#103), by "<plugin id>:<slot>". */
+const pluginPanels = new Map<string, PluginPanelView>();
+
+/** Removes every panel of a plugin (it stopped running). */
+function clearPanels(pluginId: string): void {
+  for (const key of [...pluginPanels.keys()]) if (key.startsWith(`${pluginId}:`)) pluginPanels.delete(key);
+}
 const pluginLog = log.child('plugins');
 /** The Spotify client for plugins: the same queue and cache, at background priority (#102). */
 let pluginSpotify: { base: SpotifyClient; client: SpotifyClient } | null = null;
@@ -251,6 +260,13 @@ function startPlugins(): void {
       plugins?.onHostDisabled(id, ['flood']);
     },
     onQueueChanged: () => pluginEvents?.queueChanged(),
+    uiSlots: (id) => store.get(id)?.manifest.ui ?? [],
+    setPanel: (id, slot, panel) => {
+      const key = `${id}:${slot}`;
+      if (panel) pluginPanels.set(key, { pluginId: id, pluginName: store.get(id)?.manifest.name ?? id, slot, panel });
+      else pluginPanels.delete(key);
+      pushSnapshot();
+    },
   });
   pluginEvents = new PluginEvents((event, payload) => pluginHost?.dispatch(event, payload, plugins?.running(EVENT_PERMISSION) ?? []));
   pluginHost = new PluginHost({
@@ -281,6 +297,7 @@ function startPlugins(): void {
     onStopped: (id) => {
       api.forget(id);
       storage.forget(id);
+      clearPanels(id);
     },
   });
   void plugins.start();
@@ -349,6 +366,7 @@ function snapshot(): Snapshot {
     plugins: plugins?.views() ?? [],
     pluginPrompt: plugins?.pendingPrompt() ?? null,
     pluginError: plugins?.lastError() ?? null,
+    pluginPanels: [...pluginPanels.values()],
     preferences: {
       closeToTray: settings?.get().closeToTray ?? true,
       minimizeToTray: settings?.get().minimizeToTray ?? false,
@@ -1001,6 +1019,12 @@ function registerIpc(): void {
     if (typeof id === 'string') plugins?.uninstall(id);
   });
   ipcMain.on('ui:plugin-dismiss-error', () => plugins?.dismissError());
+  ipcMain.on('ui:plugin-ui-action', (_event, pluginId: unknown, slot: unknown, id: unknown, value: unknown) => {
+    if (typeof pluginId !== 'string' || typeof slot !== 'string' || !plugins?.granted(pluginId)) return;
+    const shown = pluginPanels.get(`${pluginId}:${slot}`);
+    const action = shown ? checkAction(shown.panel, id, value) : null;
+    if (action) pluginHost?.dispatch('ui.action', { slot, ...action }, [pluginId]);
+  });
   ipcMain.on('ui:open-update', () => {
     // The address was checked when the release was read: only this project's release pages.
     if (update) void openInBrowser(update.url);

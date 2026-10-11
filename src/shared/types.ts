@@ -4,7 +4,7 @@
  */
 
 import type { Page } from './pages';
-import type { PluginPrompt, PluginView } from './plugins';
+import type { PluginPanelView, PluginPrompt, PluginView } from './plugins';
 
 /** Commands the playback host (hidden SDK window) can execute directly. */
 export type PlayerCommand =
@@ -268,6 +268,8 @@ export interface Snapshot {
   pluginPrompt: PluginPrompt | null;
   /** Why the last package could not be installed, until dismissed. */
   pluginError: string | null;
+  /** Panels plugins show (#103), drawn by the window with its own components. */
+  pluginPanels: PluginPanelView[];
   /** The tray and start-up options on the Settings page. */
   preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean; checkForUpdates: boolean };
   /** Name of the chosen output device (#89), or null for the system default. */
@@ -326,6 +328,8 @@ export interface UiApi {
   setPluginEnabled(id: string, enabled: boolean): void;
   uninstallPlugin(id: string): void;
   dismissPluginError(): void;
+  /** A click or change in a plugin's panel (#103); main checks it against the panel before the plugin hears of it. */
+  pluginUiAction(pluginId: string, slot: string, id: string, value: boolean | number | string | null): void;
   /** Turns a tray or start-up option on or off. */
   setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized' | 'checkForUpdates', value: boolean): void;
   /** Opens the release page of the update in the browser. */
