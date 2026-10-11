@@ -13,7 +13,10 @@ import { ErrorBurstLimiter } from './error-burst';
 import { installProcessHandlers, type CrashReport } from './logging/crash';
 import { NEW_ISSUE_URL, buildDiagnosticsBundle, buildIssueUrl, crashId, crashIssue, lastLines, unseenCrash } from './logging/diagnostics';
 import { MetricsLogger } from './metrics';
+import { EVENT_PERMISSION, PluginApi } from './plugins/api';
+import { PluginEvents } from './plugins/events';
 import { PluginManager } from './plugins/manager';
+import { PluginStorage } from './plugins/storage';
 import { PluginHost } from './plugins/plugin-host';
 import { PluginStore } from './plugins/store';
 import { recallVolume, rememberVolume, volumeKey } from './device-volume';
@@ -200,7 +203,28 @@ function restrictPlaybackPermissions(): void {
 
 let plugins: PluginManager | null = null;
 let pluginHost: PluginHost | null = null;
+let pluginEvents: PluginEvents | null = null;
 const pluginLog = log.child('plugins');
+/** The Spotify client for plugins: the same queue and cache, at background priority (#102). */
+let pluginSpotify: { base: SpotifyClient; client: SpotifyClient } | null = null;
+
+/** The background-priority client for the current login, or null when logged out. */
+function spotifyForPlugins(): SpotifyClient | null {
+  if (!spotify) return null;
+  if (pluginSpotify?.base !== spotify) pluginSpotify = { base: spotify, client: spotify.withCommandPriority('background') };
+  return pluginSpotify.client;
+}
+
+/** Sets the equalizer preset for a plugin (#102); the user's on/off choice stays theirs. */
+async function setEqPresetForPlugin(preset: string): Promise<string> {
+  if (!settings || !(EQ_PRESETS as readonly string[]).includes(preset)) return 'invalid';
+  const eq = settings.get().eq;
+  settings.update({ eq: { ...eq, preset: preset as EqPreset } });
+  pushSnapshot();
+  if (!eq.enabled) return 'off';
+  await equalizer.apply();
+  return equalizer.view().status === 'ready' ? 'applied' : equalizer.view().status;
+}
 
 /**
  * The plugin system (#101): installed plugins, and the plugin-host process that runs the ones that are on (it only
@@ -208,11 +232,39 @@ const pluginLog = log.child('plugins');
  */
 function startPlugins(): void {
   const store = new PluginStore(app.getPath('userData'), (message) => pluginLog.warn(message, { code: 'PLUGIN_STORE' }));
+  const storage = new PluginStorage(store.dataDir);
   const forPlugin = (id: string) => logging.plugins.forPlugin(id, store.get(id)?.manifest.version ?? 'unknown');
+  const api = new PluginApi({
+    granted: (id) => plugins?.granted(id) ?? null,
+    spotify: spotifyForPlugins,
+    playback: {
+      view: () => nowPlaying.view(),
+      playingHere: () => nowPlaying.playingHere(),
+      targetDeviceId: () => nowPlaying.targetDeviceId(),
+      sendToHost,
+    },
+    setEqPreset: setEqPresetForPlugin,
+    eqPresets: EQ_PRESETS,
+    storage,
+    onFlood: (id) => {
+      forPlugin(id).error('Turned off: it kept calling Spotify far more often than allowed.');
+      plugins?.onHostDisabled(id, ['flood']);
+    },
+    onQueueChanged: () => pluginEvents?.queueChanged(),
+  });
+  pluginEvents = new PluginEvents((event, payload) => pluginHost?.dispatch(event, payload, plugins?.running(EVENT_PERMISSION) ?? []));
   pluginHost = new PluginHost({
     spawn: () =>
       utilityProcess.fork(path.join(__dirname, 'plugins', 'host-process.js'), [], { serviceName: 'Playlish plugins', stdio: 'ignore' }),
-    handleCall: () => Promise.reject(new Error('Plugin actions are not available yet (plugin API v1).')),
+    handleCall: async (id, action, args) => {
+      try {
+        return await api.call(id, action, args);
+      } catch (err) {
+        // The plugin sees the reason; refused permissions are also written to plugins.log.
+        if (/needs the ".+" permission/.test((err as Error).message)) forPlugin(id).warn((err as Error).message);
+        throw err;
+      }
+    },
     onLog: (id, level, message) => forPlugin(id)[level](message.slice(0, 500)),
     onDisabled: (id, reasons) => plugins?.onHostDisabled(id, reasons),
     onEventFailed: (id, event, error) => forPlugin(id).error(`Handling ${event} failed: ${error.slice(0, 300)}`),
@@ -226,6 +278,10 @@ function startPlugins(): void {
     fileSize: (file) => fs.statSync(file).size,
     onChange: () => pushSnapshot(),
     log: (level, message, context) => pluginLog[level](message, { code: 'PLUGIN', context }),
+    onStopped: (id) => {
+      api.forget(id);
+      storage.forget(id);
+    },
   });
   void plugins.start();
 }
@@ -579,16 +635,23 @@ const sessions = new SessionHolder<Auth>({
 });
 
 // What the Now Playing bar shows: SDK events while playing here, the Web API (polled, window visible only) otherwise.
+/** Sends a command to this computer's player; false when the playback host is not running. */
+function sendToHost(command: PlayerCommand): boolean {
+  if (!hostWindow || hostWindow.isDestroyed()) return false;
+  hostWindow.webContents.send('host:command', command);
+  return true;
+}
+
 const nowPlaying = new NowPlayingController({
   api: () => spotify,
-  sendToHost: (command: PlayerCommand) => {
-    if (!hostWindow || hostWindow.isDestroyed()) return false;
-    hostWindow.webContents.send('host:command', command);
-    return true;
-  },
+  sendToHost,
   ownDeviceId: () => deviceId,
   loggedIn: () => auth?.isLoggedIn() ?? false,
-  onChange: () => pushSnapshot(),
+  onChange: () => {
+    pushSnapshot();
+    // Plugins hear about real changes only (#102).
+    pluginEvents?.update(nowPlaying.view());
+  },
   log: (message, context) => playerLog.info(message, { code: 'NOW_PLAYING_MOVE', context }),
   onError: (err) => {
     playerLog.warn('Playback command or check failed', {

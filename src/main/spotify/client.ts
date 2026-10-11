@@ -50,6 +50,8 @@ export interface ClientDeps {
   queue?: RequestQueue;
   cache?: ResponseCache;
   delay?: (ms: number) => Promise<void>;
+  /** Queue priority of playback commands and library changes: the user's own actions by default. */
+  commandPriority?: Priority;
 }
 
 export interface PlayOptions {
@@ -117,6 +119,14 @@ export class SpotifyClient {
     this.fetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
     this.baseUrl = deps.baseUrl ?? API_BASE;
     this.wait = deps.delay ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  }
+
+  /**
+   * The same client (one request queue, one cache) with playback commands and library changes at another priority. Used
+   * for work the user did not start themselves, such as plugins (#102), which run at background priority.
+   */
+  withCommandPriority(priority: Priority): SpotifyClient {
+    return new SpotifyClient({ ...this.deps, queue: this.queue, cache: this.cache, commandPriority: priority });
   }
 
   // ----- profile and player state -----
@@ -307,9 +317,9 @@ export class SpotifyClient {
 
   // ----- plumbing -----
 
-  /** A playback command: user priority, never cached, optional device id. */
+  /** A playback command or library change: user priority (unless set otherwise), never cached, optional device id. */
   private command(method: RequestOptions<void>['method'], path: string, endpoint: string, deviceId?: string, body?: unknown, retryNotFound = false, query: Record<string, string | number | boolean> = {}): Promise<void> {
-    return this.request<void>({ method, path, endpoint, priority: 'user', query: { ...query, device_id: deviceId }, body, retryNotFound });
+    return this.request<void>({ method, path, endpoint, priority: this.deps.commandPriority ?? 'user', query: { ...query, device_id: deviceId }, body, retryNotFound });
   }
 
   /** Runs one request through the cache and the queue. */

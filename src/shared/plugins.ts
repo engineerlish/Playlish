@@ -6,7 +6,7 @@
 /** Every permission a plugin can ask for in API v1, with the sentence the install prompt shows for it. */
 export const PLUGIN_PERMISSIONS = {
   'playback.read': 'See what is playing and on which device',
-  'playback.control': 'Control playback: play, pause, skip, seek and the queue',
+  'playback.control': 'Control playback: play, pause, skip and add to the queue',
   'library.read': 'Read your library: liked songs, saved albums and playlists',
   'library.modify': 'Change your library: save and remove songs and albums',
   'audio.control': 'Change the volume and the equalizer',
