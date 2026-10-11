@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PluginPrompt, PluginView } from '../../shared/plugins';
+import type { PluginPermission, PluginPrompt, PluginView } from '../../shared/plugins';
 import { DEFAULT_LIMITS, type SandboxLimits, type Violation } from './limits';
 import { PackageError, inspectPackage, type InstalledPlugin, type PackageInspection } from './store';
 import { ZIP_LIMITS } from './zip';
@@ -44,15 +44,21 @@ export interface PluginManagerDeps {
   fileSize(file: string): number;
   onChange(): void;
   log(level: 'info' | 'warn', message: string, context: Record<string, unknown>): void;
+  /** A plugin stopped running here (turned off or uninstalled), so per-plugin state elsewhere can be dropped. */
+  onStopped?(pluginId: string): void;
   newToken?: () => string;
   now?: () => number;
 }
 
+/** Why Playlish turns a plugin off: limits broken in the sandbox, crashing the plugin process, or flooding the API. */
+export type DisableCause = Violation | 'crash' | 'flood';
+
 /** The plugin manager's message for a plugin that Playlish turned off. */
-export function disabledReason(reasons: (Violation | 'crash')[]): string {
+export function disabledReason(reasons: DisableCause[]): string {
   if (reasons.includes('crash')) return 'Turned off because the plugin process crashed twice while it was running.';
+  if (reasons.includes('flood')) return 'Turned off because it kept calling Spotify far more often than allowed.';
   const words: Record<Violation, string> = { memory: 'memory', cpu: 'time per event', 'cpu-minute': 'time per minute', error: 'errors' };
-  const unique = [...new Set(reasons)].filter((r): r is Violation => r !== 'crash').map((r) => words[r]);
+  const unique = [...new Set(reasons)].filter((r): r is Violation => r !== 'crash' && r !== 'flood').map((r) => words[r]);
   return `Turned off because it kept going over its limits (${unique.join(', ') || 'limits'}).`;
 }
 
@@ -87,6 +93,22 @@ export class PluginManager {
       permissions: [...p.granted],
       disabledReason: p.disabledReason,
     }));
+  }
+
+  /** The permissions of a plugin that is running (installed, on, not safe mode), or null. */
+  granted(id: string): PluginPermission[] | null {
+    if (this.deps.safeMode) return null;
+    const plugin = this.deps.store.get(id);
+    return plugin?.enabled ? [...plugin.granted] : null;
+  }
+
+  /** Running plugins that were granted a permission (the ones that may hear events). */
+  running(permission: PluginPermission): string[] {
+    if (this.deps.safeMode) return [];
+    return this.deps.store
+      .list()
+      .filter((p) => p.enabled && p.granted.includes(permission))
+      .map((p) => p.manifest.id);
   }
 
   /** The install prompt waiting for an answer, if any. */
@@ -175,6 +197,7 @@ export class PluginManager {
     this.deps.store.setEnabled(id, enabled);
     this.deps.log('info', enabled ? 'Plugin turned on' : 'Plugin turned off', { id });
     this.deps.onChange();
+    if (!enabled) this.deps.onStopped?.(id);
     if (this.deps.safeMode) return;
     if (enabled) await this.load(id);
     else this.deps.host.unload(id);
@@ -184,16 +207,20 @@ export class PluginManager {
   uninstall(id: string): void {
     if (!this.deps.store.get(id)) return;
     this.deps.host.unload(id);
+    this.deps.onStopped?.(id);
     this.deps.store.uninstall(id);
     this.deps.log('info', 'Plugin uninstalled', { id });
     this.deps.onChange();
   }
 
-  /** The plugin host turned a plugin off (limits or crashes): remember it, with the reason. */
-  onHostDisabled(id: string, reasons: (Violation | 'crash')[]): void {
+  /** Playlish turned a plugin off (limits, crashes or flooding): remember it, with the reason, and stop it. */
+  onHostDisabled(id: string, reasons: DisableCause[]): void {
     if (!this.deps.store.get(id)) return;
     const reason = disabledReason(reasons);
     this.deps.store.setEnabled(id, false, reason);
+    this.deps.onStopped?.(id);
+    // The sandbox may still be loaded (flooding is noticed here, not in the sandbox).
+    this.deps.host.unload(id);
     this.deps.log('warn', 'Plugin turned off by Playlish', { id, reasons });
     this.deps.onChange();
   }

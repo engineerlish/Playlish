@@ -4,7 +4,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import axe from 'axe-core';
 import { makePackage } from '../helpers/zip';
 import { expect, test } from './fixtures';
-import { TEST_CLIENT_ID, logEntries } from './harness';
+import { TEST_CLIENT_ID, inHost, logEntries, stubCommands, waitForPlayerReady } from './harness';
 
 /*
  * The plugin manager (#101) and safe mode (#50). Packages are built by the test and picked through the real file dialog
@@ -30,6 +30,15 @@ async function pluginProcesses(app: ElectronApplication): Promise<number> {
 function pluginLog(userDataDir: string): string {
   const file = path.join(userDataDir, 'logs', 'plugins.log');
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+}
+
+/** The messages in plugins.log, one per line (the file is JSON lines). */
+function pluginMessages(userDataDir: string): string[] {
+  return pluginLog(userDataDir)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => (JSON.parse(line) as { msg: string }).msg);
 }
 
 /** WCAG A and AA violations on the page, as readable lines. */
@@ -112,6 +121,68 @@ test.describe('plugins', () => {
     await expect.poll(() => pluginProcesses(app)).toBe(0);
     expect(fs.existsSync(path.join(userDataDir, 'plugins', 'com.example.hello'))).toBe(false);
     expect(fs.existsSync(path.join(userDataDir, 'plugin-data', 'com.example.hello'))).toBe(false);
+  });
+
+  test('API v1: a plugin hears the track, uses its storage, controls playback, and is refused what it was not granted', async ({ start }) => {
+    const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID });
+    await ui.click('#login');
+    await waitForPlayerReady(app);
+    await ui.click('#nav-plugins');
+    const code = `
+      let skipped = false;
+      playlish.on('track.changed', async (playback) => {
+        if (!playback) return;
+        playlish.log('track: ' + playback.track.name);
+        await playlish.call('storage.set', { key: 'last', value: playback.track.name });
+        if (!skipped) {
+          skipped = true;
+          await playlish.call('next');
+        }
+      });
+      playlish.call('library.save', { uris: ['spotify:track:4uLU6hMCjMI75M1A2tKUQC'] }).then(
+        () => playlish.log('saved'),
+        (e) => playlish.log('refused: ' + e.message),
+      );
+    `;
+    await offerPackage(app, userDataDir, 'api.playlish', makePackage({ permissions: ['playback.read', 'playback.control', 'storage'] }, code));
+    await ui.click('#installPlugin');
+    await ui.click('#approvePlugin');
+    await expect.poll(() => pluginMessages(userDataDir)).toContain('refused: "library.save" needs the "library.modify" permission, which this plugin was not given.');
+
+    await inHost(app, 'window.__stub.startPlaying()');
+
+    // It heard the first track and skipped it, through the API, to the player on this computer.
+    await expect.poll(() => pluginMessages(userDataDir)).toContain('track: E2E Song One');
+    await expect.poll(async () => (await stubCommands(app)).map((c) => c.method)).toContain('nextTrack');
+    await expect.poll(() => pluginMessages(userDataDir).filter((m) => m.startsWith('track: ')).length).toBe(2);
+    const stored = () => JSON.parse(fs.readFileSync(path.join(userDataDir, 'plugin-data', 'com.example.hello', 'storage.json'), 'utf8')) as { last: string };
+    await expect.poll(() => stored().last).not.toBe('E2E Song One');
+    // The refused call is in plugins.log for the user too, as a warning from Playlish.
+    expect(pluginMessages(userDataDir)).toContain('"library.save" needs the "library.modify" permission, which this plugin was not given.');
+  });
+
+  test('a plugin that floods the API is turned off, and Playlish keeps working', async ({ start }) => {
+    const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID });
+    await ui.click('#login');
+    await waitForPlayerReady(app);
+    await ui.click('#nav-plugins');
+    const flood = `
+      (async () => {
+        for (let i = 0; i < 1000; i++) {
+          try { await playlish.call('search', { query: 'flood ' + i }); } catch (e) {}
+        }
+      })();
+    `;
+    await offerPackage(app, userDataDir, 'flood.playlish', makePackage({ permissions: [] }, flood));
+    await ui.click('#installPlugin');
+    await ui.click('#approvePlugin');
+
+    await expect(ui.locator(`${row} .plugin-disabled-reason`)).toContainText('calling Spotify far more often than allowed');
+    await expect(ui.locator(`${row} .plugin-enabled`)).not.toBeChecked();
+    await expect.poll(() => pluginProcesses(app)).toBe(0);
+    // The window still answers.
+    await ui.click('#nav-settings');
+    await expect(ui.locator('#page-settings')).toBeVisible();
   });
 
   test('a broken package is explained, and a plugin that fails to start is turned off with the reason', async ({ start }) => {
