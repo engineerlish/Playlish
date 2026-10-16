@@ -23,7 +23,8 @@ import { PluginHost } from './plugins/plugin-host';
 import { PluginStore } from './plugins/store';
 import { recallVolume, rememberVolume, volumeKey } from './device-volume';
 import { DevicesController } from './devices';
-import { REGISTRY_KEY, parseRegQuery } from './eq/apo';
+import { REGISTRY_KEY } from './eq/apo';
+import { EqConfigLookup } from './eq/registry';
 import { EqController } from './eq/controller';
 import { LibraryService } from './library';
 import { NowPlayingController } from './now-playing';
@@ -709,37 +710,15 @@ const devices = new DevicesController({
 // CHANGE HERE: Equalizer APO's download page, opened from Settings when it is not installed.
 const EQ_APO_DOWNLOAD = 'https://sourceforge.net/projects/equalizerapo/';
 
-// CHANGE HERE: how often the registry is checked again for Equalizer APO (in the background, when the EQ is used).
-const EQ_CONFIG_RECHECK_MS = 60_000;
+/** Equalizer APO's config folder, read from the registry in the background (eq/registry.ts). */
+const eqConfig = new EqConfigLookup(
+  (callback) => execFile('reg', ['query', REGISTRY_KEY, '/v', 'ConfigPath'], { encoding: 'utf8', windowsHide: true }, (err, stdout) => callback(err, stdout)),
+  () => void equalizer.apply(),
+);
 
-/** Equalizer APO's config folder as last read from the registry, and when; null before the first answer. */
-let eqConfig: { path: string | null; checkedAt: number } | null = null;
-let eqConfigChecking = false;
-
-/**
- * Equalizer APO's config folder (or the fake one in test mode), or null when it is not installed. The registry is read
- * in the background, never while Playlish waits: the first call starts the read and answers "not installed"; when the
- * answer comes, the EQ is applied again. Later calls use the cached answer and refresh it at most once a minute, so
- * installing Equalizer APO is still noticed without a restart.
- */
+/** Equalizer APO's config folder (or the fake one in test mode), or null when it is not installed (or not known yet). */
 function eqConfigPath(): string | null {
-  if (e2e) return e2e.eqConfigDir;
-  if (!eqConfig || Date.now() - eqConfig.checkedAt > EQ_CONFIG_RECHECK_MS) refreshEqConfigPath();
-  return eqConfig?.path ?? null;
-}
-
-/** Reads the config folder from the registry without blocking, and applies the EQ again when the answer changed. */
-function refreshEqConfigPath(): void {
-  if (eqConfigChecking) return;
-  eqConfigChecking = true;
-  execFile('reg', ['query', REGISTRY_KEY, '/v', 'ConfigPath'], { encoding: 'utf8', windowsHide: true }, (err, stdout) => {
-    eqConfigChecking = false;
-    // reg exits with an error when the key does not exist: Equalizer APO is not installed.
-    const found = err ? null : parseRegQuery(stdout);
-    const changed = eqConfig?.path !== found || eqConfig === null;
-    eqConfig = { path: found, checkedAt: Date.now() };
-    if (changed) void equalizer.apply();
-  });
+  return e2e ? e2e.eqConfigDir : eqConfig.path();
 }
 
 // The Equalizer APO integration (#91).
