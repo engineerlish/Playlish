@@ -218,9 +218,9 @@ const pluginLog = log.child('plugins');
 /** The Spotify client for plugins: the same queue and cache, at background priority (#102). */
 let pluginSpotify: { base: SpotifyClient; client: SpotifyClient } | null = null;
 
-/** The background-priority client for the current login, or null when logged out. */
+/** The background-priority client for the current login, or null when logged out (plugins then hear "Not logged in"). */
 function spotifyForPlugins(): SpotifyClient | null {
-  if (!spotify) return null;
+  if (!spotify || !auth?.isLoggedIn()) return null;
   if (pluginSpotify?.base !== spotify) pluginSpotify = { base: spotify, client: spotify.withCommandPriority('background') };
   return pluginSpotify.client;
 }

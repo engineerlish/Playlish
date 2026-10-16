@@ -175,8 +175,8 @@ test.describe('plugins', () => {
     await offerPackage(first.app, first.userDataDir, 'start.playlish', makePackage({ permissions: ['library.read'] }, code));
     await first.ui.click('#installPlugin');
     await first.ui.click('#approvePlugin');
-    // Not logged in yet: its first read fails.
-    await expect.poll(() => pluginMessages(first.userDataDir).some((m) => m.startsWith('no playlists'))).toBe(true);
+    // Not logged in yet: its first read fails, and it is told why.
+    await expect.poll(() => pluginMessages(first.userDataDir)).toContain('no playlists: Not logged in to Spotify.');
 
     await first.ui.click('#nav-library');
     await first.ui.click('#login');
