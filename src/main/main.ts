@@ -1,5 +1,5 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell, utilityProcess } from 'electron';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -23,7 +23,8 @@ import { PluginHost } from './plugins/plugin-host';
 import { PluginStore } from './plugins/store';
 import { recallVolume, rememberVolume, volumeKey } from './device-volume';
 import { DevicesController } from './devices';
-import { REGISTRY_KEY, parseRegQuery } from './eq/apo';
+import { REGISTRY_KEY } from './eq/apo';
+import { EqConfigLookup } from './eq/registry';
 import { EqController } from './eq/controller';
 import { LibraryService } from './library';
 import { NowPlayingController } from './now-playing';
@@ -709,14 +710,15 @@ const devices = new DevicesController({
 // CHANGE HERE: Equalizer APO's download page, opened from Settings when it is not installed.
 const EQ_APO_DOWNLOAD = 'https://sourceforge.net/projects/equalizerapo/';
 
-/** Equalizer APO's config folder from the registry (or the fake one in test mode), or null when it is not installed. */
+/** Equalizer APO's config folder, read from the registry in the background (eq/registry.ts). */
+const eqConfig = new EqConfigLookup(
+  (callback) => execFile('reg', ['query', REGISTRY_KEY, '/v', 'ConfigPath'], { encoding: 'utf8', windowsHide: true }, (err, stdout) => callback(err, stdout)),
+  () => void equalizer.apply(),
+);
+
+/** Equalizer APO's config folder (or the fake one in test mode), or null when it is not installed (or not known yet). */
 function eqConfigPath(): string | null {
-  if (e2e) return e2e.eqConfigDir;
-  try {
-    return parseRegQuery(execFileSync('reg', ['query', REGISTRY_KEY, '/v', 'ConfigPath'], { encoding: 'utf8', windowsHide: true }));
-  } catch {
-    return null;
-  }
+  return e2e ? e2e.eqConfigDir : eqConfig.path();
 }
 
 // The Equalizer APO integration (#91).
