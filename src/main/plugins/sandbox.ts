@@ -1,5 +1,5 @@
 import { newQuickJSWASMModule, newVariant, RELEASE_SYNC, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime, type QuickJSWASMModule } from 'quickjs-emscripten';
-import { DEFAULT_LIMITS, type SandboxLimits, type Violation } from './limits';
+import { DEFAULT_LIMITS, VIOLATION_WINDOW_MS, type SandboxLimits, type Violation } from './limits';
 
 /*
  * One plugin's sandbox (#100): its own QuickJS engine compiled to WebAssembly, with hard limits.
@@ -8,11 +8,14 @@ import { DEFAULT_LIMITS, type SandboxLimits, type Violation } from './limits';
  *   limit alone let a loop of large strings grow the host by 2 GB; with a fixed WebAssembly maximum the same code just
  *   gets "out of memory" inside the sandbox.
  * - CPU: an interrupt handler stops any single call after `cpuMsPerCall`, and calls stop being accepted once a
- *   plugin used `cpuMsPerMinute` within a minute.
+ *   plugin used `cpuMsPerMinute` within a minute. Both count CPU time of the thread that runs the plugins, not wall
+ *   time, so a plugin is never charged for time the process spent waiting on a busy machine (a CI runner during the
+ *   soak once turned a well-behaved plugin off that way). On Windows that clock moves in steps of about 15.6 ms.
  * - Nothing ambient: the code sees standard JavaScript plus one `playlish` object (on, call, log). No network, files,
  *   timers or host objects. Values cross the boundary as JSON only.
  *
- * After `maxViolations` limit violations the sandbox disables itself and refuses all further work.
+ * After `maxViolations` limit violations within `violationWindowMs` (10 minutes by default) the sandbox disables itself
+ * for good and refuses all further work. Older violations expire, so rare hiccups over days of running never add up.
  *
  * Sharing: one QuickJS engine instance costs at least 16 MB (its WebAssembly minimum), so the plugin-host process runs
  * every plugin in one shared engine (`createEngine`), each in its own QuickJS runtime with its own soft memory limit,
@@ -89,6 +92,12 @@ const PRELUDE = `
 })();
 `;
 
+/** CPU time of the current thread in ms (the whole process where Node has no per-thread clock). */
+export function threadCpuMs(): number {
+  const usage = typeof process.threadCpuUsage === 'function' ? process.threadCpuUsage() : process.cpuUsage();
+  return (usage.user + usage.system) / 1000;
+}
+
 /** "Name: message" for an error thrown inside the sandbox (dumped to plain data). */
 function describeGuestError(dumped: unknown): string {
   if (typeof dumped !== 'object' || dumped === null) return String(dumped);
@@ -97,8 +106,12 @@ function describeGuestError(dumped: unknown): string {
 }
 
 export class PluginSandbox {
-  private violations: Violation[] = [];
+  /** Recent violations, with the (wall) time they happened. */
+  private violations: { kind: Violation; at: number }[] = [];
+  /** Set once the sandbox disabled itself; it never comes back. */
+  private disabled = false;
   private cpuWindow: { at: number; ms: number }[] = [];
+  /** CPU time (cpuNow) by which the current call must finish. */
   private deadline = 0;
   private disposed = false;
 
@@ -107,21 +120,25 @@ export class PluginSandbox {
     private readonly vm: QuickJSContext,
     private readonly memory: WebAssembly.Memory,
     private readonly limits: SandboxLimits,
+    /** Wall clock: for the minute and violation windows. */
     private readonly now: () => number,
+    /** CPU clock: for time spent and the per-call deadline. */
+    private readonly cpuNow: () => number,
   ) {}
 
   /**
    * Creates a sandbox and runs the plugin's code once (it registers its handlers). Without an engine it gets its own,
    * with `limits.hardMemoryMb` as the ceiling.
    */
-  static async create(code: string, host: SandboxHost, limits: SandboxLimits = DEFAULT_LIMITS, now: () => number = () => performance.now(), engine?: Engine): Promise<PluginSandbox> {
+  static async create(code: string, host: SandboxHost, limits: SandboxLimits = DEFAULT_LIMITS, now?: () => number, engine?: Engine, cpuNow?: () => number): Promise<PluginSandbox> {
     const { module, memory } = engine ?? (await createEngine(limits.hardMemoryMb));
     const runtime = module.newRuntime();
     runtime.setMemoryLimit(limits.memoryMb * 1024 * 1024);
     runtime.setMaxStackSize(512 * 1024);
     const vm = runtime.newContext();
-    const sandbox = new PluginSandbox(runtime, vm, memory, limits, now);
-    runtime.setInterruptHandler(() => sandbox.now() > sandbox.deadline);
+    // Tests that pass their own clock use it for both.
+    const sandbox = new PluginSandbox(runtime, vm, memory, limits, now ?? (() => performance.now()), cpuNow ?? now ?? threadCpuMs);
+    runtime.setInterruptHandler(() => sandbox.cpuNow() > sandbox.deadline);
     sandbox.installHost(host);
     sandbox.run(() => vm.evalCode(PRELUDE, 'prelude.js'));
     sandbox.run(() => vm.evalCode(code, 'plugin.js'));
@@ -148,11 +165,17 @@ export class PluginSandbox {
 
   /** Resource use, for the plugin manager. */
   stats(): { wasmMemoryBytes: number; cpuMsLastMinute: number; violations: Violation[]; disabled: boolean } {
-    return { wasmMemoryBytes: this.memory.buffer.byteLength, cpuMsLastMinute: this.cpuLastMinute(), violations: [...this.violations], disabled: this.isDisabled() };
+    return { wasmMemoryBytes: this.memory.buffer.byteLength, cpuMsLastMinute: this.cpuLastMinute(), violations: this.recentViolations(), disabled: this.isDisabled() };
   }
 
   isDisabled(): boolean {
-    return this.violations.length >= this.limits.maxViolations;
+    return this.disabled;
+  }
+
+  /** The violations that still count (within the violation window). */
+  private recentViolations(): Violation[] {
+    const since = this.now() - (this.limits.violationWindowMs ?? VIOLATION_WINDOW_MS);
+    return this.violations.filter((v) => v.at >= since).map((v) => v.kind);
   }
 
   /** Frees the engine. The sandbox cannot be used afterwards. */
@@ -225,12 +248,12 @@ export class PluginSandbox {
    */
   private run(step: () => { value?: QuickJSHandle; error?: QuickJSHandle } | QuickJSHandle | { value: QuickJSHandle } | ReturnType<QuickJSContext['evalCode']>): unknown {
     if (this.disposed) throw new Error('Plugin sandbox was disposed');
-    if (this.isDisabled()) throw new SandboxDisabledError(this.violations);
+    if (this.isDisabled()) throw new SandboxDisabledError(this.recentViolations());
     if (this.cpuLastMinute() >= this.limits.cpuMsPerMinute) {
       this.violate('cpu-minute');
       throw new Error('Plugin used its CPU budget for this minute');
     }
-    const started = this.now();
+    const started = this.cpuNow();
     this.deadline = started + this.limits.cpuMsPerCall;
     let result: { value?: QuickJSHandle; error?: QuickJSHandle };
     try {
@@ -256,8 +279,9 @@ export class PluginSandbox {
     return value;
   }
 
+  /** Records the CPU time a call used (from `started`, on the CPU clock), at the current wall time. */
   private recordCpu(started: number): void {
-    this.cpuWindow.push({ at: this.now(), ms: this.now() - started });
+    this.cpuWindow.push({ at: this.now(), ms: Math.max(0, this.cpuNow() - started) });
   }
 
   private cpuLastMinute(): number {
@@ -268,6 +292,10 @@ export class PluginSandbox {
 
   private violate(kind: Violation): void {
     // Plain errors in plugin code are reported, but only limit violations count towards disabling.
-    if (kind !== 'error') this.violations.push(kind);
+    if (kind === 'error') return;
+    const now = this.now();
+    const since = now - (this.limits.violationWindowMs ?? VIOLATION_WINDOW_MS);
+    this.violations = [...this.violations.filter((v) => v.at >= since), { kind, at: now }];
+    if (this.violations.length >= this.limits.maxViolations) this.disabled = true;
   }
 }

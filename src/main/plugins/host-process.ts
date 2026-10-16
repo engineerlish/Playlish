@@ -1,5 +1,5 @@
 import type { FromHost, ToHost } from './protocol';
-import { PluginSandbox, SandboxDisabledError, createEngine, type Engine, type SandboxHost, type SandboxLimits } from './sandbox';
+import { DEFAULT_LIMITS, PluginSandbox, SandboxDisabledError, createEngine, type Engine, type SandboxHost, type SandboxLimits } from './sandbox';
 
 /*
  * The plugin-host process (#100): an Electron utility process (Node only, no window) that holds every enabled plugin's
@@ -14,11 +14,27 @@ type Create = (code: string, host: SandboxHost, limits: SandboxLimits) => Promis
 // CHANGE HERE: the hard memory ceiling of the engine all plugins share (see sandbox.ts).
 export const SHARED_ENGINE_MB = 64;
 
-/** One engine for every plugin in this process, created with the first plugin. */
+// CHANGE HERE: the code and limits of the warm-up run (generous: it only has to finish).
+const WARM_UP_CODE = "playlish.on('x', (p) => JSON.stringify(p)); [1, 2, 3].map((n) => ({ n })).filter(Boolean).length;";
+const WARM_UP_LIMITS = { ...DEFAULT_LIMITS, cpuMsPerCall: 10_000, cpuMsPerMinute: 60_000 };
+
+/**
+ * A new engine, warmed up: one throwaway sandbox runs first, so the one-time costs of a fresh engine (about 15 ms here,
+ * several times that on a slow machine) are not charged to the first real plugin's time limit.
+ */
+async function warmEngine(): Promise<Engine> {
+  const engine = await createEngine(SHARED_ENGINE_MB);
+  const warm = await PluginSandbox.create(WARM_UP_CODE, { call: () => Promise.resolve(null), log: () => undefined }, WARM_UP_LIMITS, undefined, engine);
+  warm.dispatch('x', { warm: true });
+  warm.dispose();
+  return engine;
+}
+
+/** One engine for every plugin in this process, created (and warmed up) with the first plugin. */
 function sharedEngineCreate(): Create {
   let engine: Promise<Engine> | null = null;
   return async (code, host, limits) => {
-    engine ??= createEngine(SHARED_ENGINE_MB);
+    engine ??= warmEngine();
     return PluginSandbox.create(code, host, limits, undefined, await engine);
   };
 }
