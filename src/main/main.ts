@@ -218,9 +218,9 @@ const pluginLog = log.child('plugins');
 /** The Spotify client for plugins: the same queue and cache, at background priority (#102). */
 let pluginSpotify: { base: SpotifyClient; client: SpotifyClient } | null = null;
 
-/** The background-priority client for the current login, or null when logged out. */
+/** The background-priority client for the current login, or null when logged out (plugins then hear "Not logged in"). */
 function spotifyForPlugins(): SpotifyClient | null {
-  if (!spotify) return null;
+  if (!spotify || !auth?.isLoggedIn()) return null;
   if (pluginSpotify?.base !== spotify) pluginSpotify = { base: spotify, client: spotify.withCommandPriority('background') };
   return pluginSpotify.client;
 }
@@ -301,7 +301,40 @@ function startPlugins(): void {
       clearPanels(id);
     },
   });
+}
+
+// CHANGE HERE: how long plugins wait for the player at start-up before they start anyway.
+const PLUGIN_START_TIMEOUT_MS = 15_000;
+/** Whether the plugins that are on were started, and whether there was a usable session then. */
+let pluginsStarted: 'no' | 'logged-out' | 'logged-in' = 'no';
+
+/**
+ * Starts the plugins that are on (#101). With a saved session they wait until the player is ready (at most
+ * PLUGIN_START_TIMEOUT_MS), so their first calls can reach Spotify; without one they start at once.
+ */
+function startPluginsWhenReady(): void {
+  if (!auth?.isLoggedIn()) {
+    startPluginsNow();
+    return;
+  }
+  setTimeout(startPluginsNow, PLUGIN_START_TIMEOUT_MS);
+}
+
+function startPluginsNow(): void {
+  if (pluginsStarted !== 'no' || !plugins) return;
+  pluginsStarted = auth?.isLoggedIn() ? 'logged-in' : 'logged-out';
   void plugins.start();
+}
+
+/** The player is ready: start plugins that waited for it, or restart those that started without a session. */
+function pluginsOnPlayerReady(): void {
+  if (pluginsStarted === 'no') {
+    startPluginsNow();
+  } else if (pluginsStarted === 'logged-out' && auth?.isLoggedIn()) {
+    pluginsStarted = 'logged-in';
+    // Their start code ran without access to Spotify (for example to load your playlists): run it again.
+    void plugins?.restartRunning();
+  }
 }
 
 // CHANGE HERE: V8 flags for the plugin process. Compiling QuickJS's WebAssembly function by function, as it is first
@@ -811,6 +844,8 @@ function startSetup(): void {
 
 /** Forgets the session everywhere: in memory, on disk, and in the playback host. */
 function signOut(): void {
+  // Plugins keep running without access to Spotify; the next login gives them a fresh start.
+  if (pluginsStarted === 'logged-in') pluginsStarted = 'logged-out';
   auth?.clear();
   spotify?.clearCache();
   warnedAboutScopes = false;
@@ -896,6 +931,7 @@ function registerIpc(): void {
   ipcMain.on('host:ready', (_event, id: string) => {
     deviceId = id;
     restoreVolume();
+    pluginsOnPlayerReady();
     // With "System default", the EQ's device line needs the player to read the default device's name.
     if (settings?.get().eq.enabled && settings.get().outputDevice === null) void equalizer.apply();
     setStatus('Player ready.');
@@ -1228,6 +1264,7 @@ async function main(): Promise<void> {
   } else {
     setStatus('Not logged in.');
   }
+  startPluginsWhenReady();
   // "Start minimized" (or --tray): only the tray icon; the window opens from it.
   if (!process.argv.includes(TRAY_ONLY_FLAG) && !store.get().startMinimized) openUi();
 
