@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Plugins that are on now start once your saved Spotify session is back (when the player is ready, at most 15 seconds after start), and start again after you log in, so a plugin that reads your library when it starts (like EQ by playlist) no longer shows an error until the next restart.
 - After moving playback to another device, the bar shows where it plays ("Playing on …") instead of this computer's paused track.
 
 ## [0.1.0] - 2026-10-04

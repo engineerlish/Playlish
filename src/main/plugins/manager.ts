@@ -81,6 +81,16 @@ export class PluginManager {
     }
   }
 
+  /** Loads every plugin that is on again, so their start code runs again (after a login). Their storage stays. */
+  async restartRunning(): Promise<void> {
+    if (this.deps.safeMode) return;
+    for (const plugin of this.deps.store.list()) {
+      if (!plugin.enabled) continue;
+      this.deps.log('info', 'Plugin restarted after a login', { id: plugin.manifest.id });
+      await this.load(plugin.manifest.id);
+    }
+  }
+
   /** Installed plugins, for the plugin manager. */
   views(): PluginView[] {
     return this.deps.store.list().map((p) => ({

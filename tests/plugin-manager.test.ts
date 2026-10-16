@@ -210,6 +210,24 @@ describe('PluginManager: lifecycle', () => {
     expect(safe.store.get('com.example.hello')?.manifest.version).toBe('1.1.0');
   });
 
+  it('restartRunning loads the plugins that are on again (none in safe mode)', async () => {
+    const { m, store } = manager();
+    m.openPackage('hello.playlish');
+    await m.approve('token-1');
+    files.set('other.playlish', makePackage({ id: 'com.example.other' }, 'other();'));
+    m.openPackage('other.playlish');
+    await m.approve('token-2');
+    await m.setEnabled('com.example.other', false);
+    host.load.mockClear();
+
+    await m.restartRunning();
+
+    expect(host.load.mock.calls.map((c) => c[0])).toEqual(['com.example.hello']);
+    host.load.mockClear();
+    await manager(true, store).m.restartRunning();
+    expect(host.load).not.toHaveBeenCalled();
+  });
+
   it('a plugin that fails to start is turned off with the reason', async () => {
     host.load.mockRejectedValue(new Error('SyntaxError: unexpected token'));
     const { m } = manager();

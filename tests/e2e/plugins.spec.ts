@@ -165,6 +165,34 @@ test.describe('plugins', () => {
     await expect(ui.locator('.sidebar-panels')).toHaveCount(0);
   });
 
+  test('plugins wait for the saved session at start-up, and start again after a login', async ({ start, fake }) => {
+    const playlist = (id: string) => ({ id, name: id, uri: `spotify:playlist:${id}`, images: null, owner: { id: 'me', display_name: 'Me' }, snapshot_id: 's', collaborative: false, public: false, description: null, items: { total: 1, href: '' } });
+    fake.on('GET', '/v1/me/playlists', { status: 200, body: { items: [playlist('a'), playlist('b')], total: 2, offset: 0, limit: 50, next: null, previous: null, href: '' } });
+    // Like EQ by playlist: it reads your playlists once, when it starts.
+    const code = "playlish.call('library.playlists').then((r) => playlish.log('playlists ' + r.total), (e) => playlish.log('no playlists: ' + e.message));";
+    const first = await start({ clientId: TEST_CLIENT_ID });
+    await first.ui.click('#nav-plugins');
+    await offerPackage(first.app, first.userDataDir, 'start.playlish', makePackage({ permissions: ['library.read'] }, code));
+    await first.ui.click('#installPlugin');
+    await first.ui.click('#approvePlugin');
+    // Not logged in yet: its first read fails.
+    await expect.poll(() => pluginMessages(first.userDataDir).some((m) => m.startsWith('no playlists'))).toBe(true);
+
+    await first.ui.click('#nav-library');
+    await first.ui.click('#login');
+    await waitForPlayerReady(first.app);
+    // Restarted after the login, so its start code could read them.
+    await expect.poll(() => pluginMessages(first.userDataDir)).toContain('playlists 2');
+    await first.app.close();
+
+    // With the saved session, it starts only once the player is ready: its very first read works.
+    const before = pluginMessages(first.userDataDir).length;
+    const again = await start({ clientId: TEST_CLIENT_ID, userDataDir: first.userDataDir });
+    await waitForPlayerReady(again.app);
+    await expect.poll(() => pluginMessages(again.userDataDir).slice(before)).toContain('playlists 2');
+    expect(pluginMessages(again.userDataDir).slice(before).filter((m) => m.startsWith('no playlists'))).toEqual([]);
+  });
+
   test('a plugin that floods the API is turned off, and Playlish keeps working', async ({ start }) => {
     const { app, ui, userDataDir } = await start({ clientId: TEST_CLIENT_ID });
     await ui.click('#login');
