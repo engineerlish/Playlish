@@ -24,13 +24,21 @@ body:
     id: api
     attributes:
       label: Required plugin API version
+      description: The apiVersion in manifest.json (1 for now).
     validations:
       required: true
+  - type: input
+    id: sha256
+    attributes:
+      label: SHA-256 of the .playlish package
+      description: Shown in Playlish's install prompt, or from Get-FileHash <file> -Algorithm SHA256.
+    validations:
+      required: false
   - type: textarea
     id: permissions
     attributes:
       label: Permissions requested and why
-      description: List each permission and the reason it is needed, including any network domains.
+      description: List each permission and the reason it is needed (see docs/PLUGINS.md). Plugin API v1 has no network access.
     validations:
       required: true
   - type: checkboxes
@@ -44,3 +52,5 @@ body:
           required: true
         - label: It only uses the documented plugin API
           required: true
+        - label: The package was made with npm run plugin:pack (so it passes Playlish's install checks)
+          required: false

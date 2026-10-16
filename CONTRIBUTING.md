@@ -54,13 +54,16 @@ Checks to run before opening a pull request:
 
 | Command | What it does |
 |---|---|
-| `npm run typecheck` | Type-checks the main process, renderer and tests |
+| `npm run typecheck` | Type-checks the main process, renderer, tests, tools and the example plugins (against `sdk/playlish.d.ts`) |
 | `npm run lint` | ESLint with type-aware rules |
 | `npm test` | Unit and integration tests (Vitest) |
 | `npm run test:coverage` | Same, with a coverage report in `coverage/` |
 | `npm run audit:deps` | Dependency vulnerability check |
 | `npm run check` | Typecheck, lint and tests together |
 | `npm run e2e` | Builds, then runs the end-to-end suite (Playwright driving the real app) |
+| `npm run perf:idle`, `perf:ui`, `perf:soak` | Measures the real app against `perf/budgets.json` (Windows); `node tools/perf/run.ts --plugins` runs with the example plugins on |
+| `npm run smoke` | Real login, playback and audio on your machine (needs your Spotify account; never run in CI) |
+| `npm run plugin:pack -- <folder>` | Packs a plugin folder into a `.playlish` file, checked as Playlish checks it at install |
 
 Tests live in `tests/`. Spotify is never called from tests: use the fake server in `tests/helpers/fake-spotify.ts`. End-to-end tests live in `tests/e2e/`: they start the built app in test mode (`PLAYLISH_E2E=1`, unpackaged builds only, loopback addresses only) against the fake server, with a stub of the Web Playback SDK (`tests/e2e/fixtures/spotify-player.js`), so they need no Spotify account, no Premium and no Widevine. When one fails, its screenshot, app log and Playwright trace are in `e2e-results/` (and in the CI artifacts). Add a line to `CHANGELOG.md` under "Unreleased" for every user-visible change.
 
@@ -68,4 +71,8 @@ Playback needs a Spotify Premium account, your own Client ID from the Spotify De
 
 ## Plugins
 
-Plugin development docs will live in `docs/` once the plugin API lands. To share a plugin, open a plugin submission issue.
+The plugin guide is [docs/PLUGINS.md](docs/PLUGINS.md): the sandbox and its limits, the manifest, permissions, events, actions, panels and packing. The types are in [sdk/playlish.d.ts](sdk/playlish.d.ts), and [examples/](examples) has three example plugins and a template to start from.
+
+Changes to the plugin API or its permissions need an issue first (see above): plugins run code from other people, so every action is checked against the permissions the user approved, and new actions need tests for that check.
+
+To share a plugin, open a plugin submission issue.
