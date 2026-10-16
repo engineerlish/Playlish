@@ -19,6 +19,8 @@ interface ResultFile {
   plugins?: boolean;
   /** Reported, never enforced. */
   advisory?: boolean;
+  /** Plugins Playlish turned off during the run, and why. */
+  pluginsTurnedOff?: { id: string; reason: string | null }[];
   commit: string;
   checks: Check[];
   pass: boolean;
@@ -74,6 +76,7 @@ if (current.size === 0) {
       const b = base?.checks.find((x) => x.name === c.name);
       lines.push(`| ${c.name} | ${c.value} ${c.unit} | ${c.limit} ${c.unit} | ${b ? `${b.value} ${b.unit}` : 'n/a'} | ${delta(c.value, b?.value)} | ${c.pass ? 'pass' : '**over budget**'} |`);
     }
+    for (const p of result.pluginsTurnedOff ?? []) lines.push(`_Turned off during the run: ${p.id}: ${p.reason ?? 'no reason recorded'}_`, '');
     lines.push('');
   }
   lines.push('_Measured on a GitHub-hosted Windows runner; numbers differ from desktop machines. Budgets are report-only in CI until a baseline is established._');

@@ -56,6 +56,8 @@ export interface PerfResult {
   plugins: boolean;
   /** Reported, never enforced (--advisory). */
   advisory: boolean;
+  /** Plugins Playlish turned off during the run, and why (--plugins). */
+  pluginsTurnedOff: { id: string; reason: string | null }[];
   date: string;
   commit: string;
   machine: { cpu: string; cores: number; memoryGb: number; os: string };
@@ -167,13 +169,15 @@ function installExamplePlugins(profile: string): void {
   for (const name of EXAMPLE_PLUGINS) store.install(inspectPackage(pack(path.join(ROOT, 'examples', name))));
 }
 
-/** How many installed plugins are still on (Playlish turns off one that breaks its limits). */
-function pluginsStillOn(profile: string): number {
+/** The installed plugins and whether they are still on (Playlish turns off one that breaks its limits, with a reason). */
+function pluginStates(profile: string): { id: string; enabled: boolean; reason: string | null }[] {
   try {
-    const index = JSON.parse(readText(path.join(profile, 'plugins', 'installed.json'))) as { plugins: { enabled: boolean }[] };
-    return index.plugins.filter((p) => p.enabled).length;
+    const index = JSON.parse(readText(path.join(profile, 'plugins', 'installed.json'))) as {
+      plugins: { manifest: { id: string }; enabled: boolean; disabledReason: string | null }[];
+    };
+    return index.plugins.map((p) => ({ id: p.manifest.id, enabled: p.enabled, reason: p.disabledReason }));
   } catch {
-    return 0;
+    return [];
   }
 }
 
@@ -245,8 +249,9 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
       const avg = trayOnly.reduce((sum, s) => sum + s.privateMb, 0) / trayOnly.length;
       checks.push(check(`Tray RAM after the window was used${withPlugins} (private, avg)`, Math.round(avg * 10) / 10, budgets.trayAfterUiPrivateMb + extra, 'MB'));
     }
+    const plugins = options.plugins ? pluginStates(profile) : [];
     if (options.plugins) {
-      const on = pluginsStillOn(profile);
+      const on = plugins.filter((p) => p.enabled).length;
       checks.push({ name: 'Plugins still on at the end', value: on, limit: EXAMPLE_PLUGINS.length, unit: '', pass: on === EXAMPLE_PLUGINS.length });
     }
     if (!summary) checks.push({ name: 'Samples collected', value: 0, limit: 1, unit: '', pass: false });
@@ -256,6 +261,7 @@ async function run(options: Options, budgets: Budgets): Promise<PerfResult> {
     return {
       scenario: options.scenario,
       plugins: options.plugins,
+      pluginsTurnedOff: plugins.filter((p) => !p.enabled).map((p) => ({ id: p.id, reason: p.reason })),
       advisory: options.advisory,
       date: new Date().toISOString(),
       commit: gitCommit(),
@@ -283,6 +289,7 @@ function toMarkdown(result: PerfResult): string {
     checksToMarkdown(`Performance: ${result.scenario}${result.plugins ? ' with plugins' : ''} (commit ${result.commit})`, result.checks),
     s ? `Samples: ${s.samples} · private avg ${s.privateMbAvg} MB, max ${s.privateMbMax} MB · CPU avg ${s.cpuPercentAvg}%, max ${s.cpuPercentMax}% · up to ${s.processesMax} processes` : 'No samples.',
     `Startup: tray ${result.startup.trayMs ?? 'n/a'} ms, UI ${result.startup.uiMs ?? 'n/a'} ms (wall clock to milestone ${result.startup.wallClockMs ?? 'n/a'} ms)`,
+    ...result.pluginsTurnedOff.map((p) => `Turned off during the run: ${p.id}: ${p.reason ?? 'no reason recorded'}`),
     ...(result.trend
       ? [`Trend over ${result.trend.samplesUsed} ${result.trendScope ?? 'samples'}: ${result.trend.startMb} MB to ${result.trend.endMb} MB (${result.trend.growthPercent}%), slope ${result.trend.slopeMbPerHour} MB/h`]
       : []),

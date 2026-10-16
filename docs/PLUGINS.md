@@ -28,13 +28,14 @@ Limits, per plugin:
 | Limit | Value | What happens |
 |---|---|---|
 | Memory | 16 MB per plugin; 64 MB for all plugins together (a hard ceiling) | The call fails with "out of memory" |
-| Time per event or call | 50 ms | The code is interrupted |
-| Time per minute | 500 ms | Further work fails until the minute is over |
+| CPU time per event or call | 50 ms | The code is interrupted |
+| CPU time per minute | 500 ms | Further work fails until the minute is over |
 | Spotify calls | 60 a minute | Calls over the limit are refused |
 | Panel updates | 120 a minute | Updates over the limit are refused |
 
-A plugin that keeps breaking these limits (3 times), keeps calling far over the API limit, or crashes the plugin
-process twice is turned off, and the plugin manager shows why. Safe mode (Plugins page, Restart in safe mode, or
+Time limits count CPU time, not time the computer spent on other things. A plugin that breaks these limits 3 times
+within 10 minutes, keeps calling far over the API limit, or crashes the plugin process twice is turned off, and the
+plugin manager shows why. Older violations expire, so a rare hiccup over days of running never adds up. Safe mode (Plugins page, Restart in safe mode, or
 `--safe-mode`) starts Playlish with every plugin off.
 
 ## The manifest

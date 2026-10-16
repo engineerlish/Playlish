@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PluginSandbox, SandboxDisabledError, createEngine, type SandboxHost, type SandboxLimits } from '../src/main/plugins/sandbox';
+import { PluginSandbox, SandboxDisabledError, createEngine, threadCpuMs, type SandboxHost, type SandboxLimits } from '../src/main/plugins/sandbox';
 
 /*
  * #11: the plugin sandbox. Every probe from the #82 plan is a test here.
@@ -136,6 +136,40 @@ describe('limits', () => {
 
     expect(sandbox.isDisabled()).toBe(true);
     expect(() => sandbox.dispatch('ok', null)).toThrow(SandboxDisabledError);
+  });
+
+  it('counts violations within the violation window only, so rare hiccups never add up', async () => {
+    const { host } = recordingHost();
+    let wall = 0;
+    // Wall time is under the test's control; CPU time is real, so the endless loop is still stopped.
+    const sandbox = await PluginSandbox.create(`playlish.on('spin', () => { for (;;) {} });`, host, { ...LIMITS, violationWindowMs: 1000 }, () => wall, undefined, threadCpuMs);
+
+    expect(() => sandbox.dispatch('spin', null)).toThrow();
+    expect(() => sandbox.dispatch('spin', null)).toThrow();
+    wall += 1001;
+    expect(() => sandbox.dispatch('spin', null)).toThrow();
+    expect(sandbox.isDisabled()).toBe(false);
+    expect(sandbox.stats().violations).toEqual(['cpu']);
+
+    expect(() => sandbox.dispatch('spin', null)).toThrow();
+    expect(() => sandbox.dispatch('spin', null)).toThrow();
+    expect(sandbox.isDisabled()).toBe(true);
+    // Once off, it stays off, however long it waits.
+    wall += 60 * 60_000;
+    expect(sandbox.isDisabled()).toBe(true);
+    expect(() => sandbox.dispatch('spin', null)).toThrow(SandboxDisabledError);
+  });
+
+  it('charges CPU time, not time spent waiting', async () => {
+    const { host } = recordingHost();
+    // A CPU clock that barely moves: like a process that is mostly waiting for the CPU on a busy machine.
+    let cpu = 0;
+    const slowCpu = () => (cpu += 0.001);
+    const sandbox = await PluginSandbox.create(`playlish.on('wait', () => { const t = Date.now(); while (Date.now() - t < 120) {} });`, host, LIMITS, undefined, undefined, slowCpu);
+
+    // 120 ms of wall time, far over the 50 ms limit, but almost no CPU time on this clock: not interrupted.
+    expect(() => sandbox.dispatch('wait', null)).not.toThrow();
+    expect(sandbox.stats().violations).toEqual([]);
   });
 
   it('can be freed, and refuses work afterwards', async () => {
