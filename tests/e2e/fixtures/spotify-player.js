@@ -150,7 +150,9 @@
     state,
     volume: () => volume,
     startPlaying(name) {
-      if (name) trackIndex = Math.max(0, TRACKS.indexOf(name));
+      // A name that is not one of the fake tracks becomes one (layout tests play very long titles).
+      if (name && !TRACKS.includes(name)) TRACKS.push(name);
+      if (name) trackIndex = TRACKS.indexOf(name);
       frozen = false;
       current = { paused: false, basePosition: 0, since: Date.now() };
       emit('player_state_changed', state());
