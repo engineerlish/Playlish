@@ -4,7 +4,7 @@ Single source of truth for the `feat/macos-ui-polish` effort. The full brief is 
 [docs/prompts/2026-10-25-macos-ui-polish.md](../prompts/2026-10-25-macos-ui-polish.md). Update and commit this file after
 every completed task.
 
-**Branch:** `feat/macos-ui-polish` · **PR:** (draft, link below once opened)
+**Branch:** `feat/macos-ui-polish` · **PR:** https://github.com/engineerlish/Playlish/pull/124 (draft)
 
 ## How a run starts (every session, including scheduled restarts)
 
@@ -20,37 +20,37 @@ every completed task.
 - [x] Progress file (this file)
 - [x] Prompt saved to `docs/prompts/2026-10-25-macos-ui-polish.md`
 - [x] Commit attribution off in `.claude/settings.json` (`attribution.commit` and `.pr` empty, `includeCoAuthoredBy: false`; already there)
-- [ ] Permissions for unattended runs in `.claude/settings.json` (npm, node, npx, git, gh only)
+- [x] Permissions for unattended runs in `.claude/settings.json` (npm, node, npx, git, gh only)
 - [ ] Scheduled restart task: definition shown to the owner, **waiting for approval** before registering
-- [ ] Draft PR opened
+- [x] Draft PR opened (#124)
 
 ### 1. Builds, launches, plays reliably on Windows
 - [x] Smoke run 2026-10-25: build, launch, login, player ready and "Playback starts" pass
-- [ ] Smoke "Real audio" failed with peak 0: Windows' volume mixer has Playlish (electron.exe) muted at volume 0. Not
+- [x] Smoke "Real audio" failed with peak 0: Windows' volume mixer has Playlish (electron.exe) muted at volume 0. Not
       set by Playlish (it never writes the mixer). Make the smoke test say so instead of just "peak 0"; the owner unmutes
       it and reruns `npm run smoke`.
 - [ ] Owner smoke rerun passes all steps (needs the owner)
 
 ### 2. Design tokens and macOS/iOS style
-- [ ] Tokens in one place (`src/renderer/tokens.css`): colors, radii, spacing, type, shadows, materials, motion; light and dark
-- [ ] Accent color setting (Settings, persisted, applied as `--accent`); default not Apple Music red
-- [ ] Font stack: -apple-system / system-ui, then Inter (if installed), Segoe UI Variable, sans-serif. No SF fonts bundled.
-- [ ] Icons: one open set (Lucide shapes, ISC) inline, stroke style
-- [ ] Window: unified title bar/toolbar area, Mica/acrylic sidebar material with solid fallback, hairline separators
-- [ ] Controls: pill buttons, segmented control (library tabs), toggles (settings checkboxes), sheets/popovers, pressed/hover
-- [ ] Motion 150–250ms ease-out, off under `prefers-reduced-motion`
-- [ ] Every screen restyled: setup wizard, library (+ album/playlist detail), search, queue, devices, settings, plugins, player bar, banners, popovers
+- [x] Tokens in one place (top of `src/renderer/ui.css`): colors, radii, spacing, type, shadows, materials, motion; light and dark
+- [x] Accent color setting (Settings, persisted, applied as `--accent`); default not Apple Music red
+- [x] Font stack: -apple-system, then Inter (bundled, OFL, Latin subsets), Segoe UI Variable, system-ui. No SF fonts bundled.
+- [x] Icons: one open set (Lucide shapes, ISC) inline, stroke style
+- [x] Window: unified title bar/toolbar area, Mica/acrylic sidebar material with solid fallback, hairline separators
+- [x] Controls: pill buttons, segmented control (library tabs), toggles (settings checkboxes), sheets/popovers, pressed/hover
+- [x] Motion 150–250ms ease-out, off under `prefers-reduced-motion`
+- [x] Every screen restyled: setup wizard, library (+ album/playlist detail), search, queue, devices, settings, plugins, player bar, banners, popovers
 
 ### 3. Polish standard
-- [ ] Ellipsis + full-text tooltip on every long text (titles, artists, playlists, devices, plugin names)
-- [ ] 32px minimum hit targets, aligned icons, visible focus
-- [ ] Designed loading, empty and error states on every page
-- [ ] Missing art, very long queues, zero-result search render cleanly
-- [ ] Automated overflow check (Playwright): every main screen at several sizes, stress data (200-char, non-Latin, emoji, no art), light and dark; in CI
-- [ ] Sizes from the minimum (360x360) to 4K, and scale factors 100/125/150/200%
+- [x] Ellipsis + full-text tooltip on every long text (titles, artists, playlists, devices, plugin names)
+- [x] 32px minimum hit targets, aligned icons, visible focus
+- [x] Designed loading, empty and error states on every page
+- [x] Missing art, very long queues, zero-result search render cleanly
+- [x] Automated overflow check (Playwright): every main screen at several sizes, stress data (200-char, non-Latin, emoji, no art), light and dark; in CI
+- [x] Sizes from the minimum (360x360) to 4K, and scale factors 100/125/150/200%
 
 ### 4. Plugins
-- [ ] Plugin panels use the tokens (sidebar and page panels)
+- [x] Plugin panels use the tokens (sidebar and page panels)
 
 ### 5. Measure and finish
 - [ ] Idle memory before (main) and after, in the PR
@@ -60,13 +60,25 @@ every completed task.
 
 ## In progress
 
-Task 0: permissions, scheduled-task proposal, draft PR. Next step: add the permission allowlist, commit, push, open the draft PR.
+Task 5: memory after the change (perf idle/ui, 2 runs each, compare with the baseline below), then CI green on #124.
+Next step: put the numbers in the PR, wait for CI, fix anything red.
+
+Baseline on main (2026-10-25, this machine, 2 runs): idle tray 78.2 / 78.3 MB, UI open 120.8 / 122.6 MB.
 
 ## Decisions
 
 - 2026-10-25: There is no artist page or full-screen Now Playing view today; the brief's "every screen" is read as the
   screens that exist (the player bar is the now-playing surface, album/playlist detail covers "album" and "playlists").
   New screens are features, not polish: a `needs-decision` issue asks the owner.
+- 2026-10-25: Tokens live at the top of `ui.css` (one file, no extra request) rather than a separate tokens.css.
+- 2026-10-25: Inter is bundled (Latin + Latin Extended, ~130 KB) because the brief asks for Inter on Windows and it
+  is rarely installed; other scripts use the system fonts.
+- 2026-10-25: Default accent is blue (#0062cc fill; lighter text shade in dark mode). All accents were chosen to meet
+  WCAG AA with white text and as text on the page, so the axe checks keep passing.
+- 2026-10-25: Mica is on only on Windows 11 build 22621+ and never in test mode (axe and screenshots need solid colours).
+- 2026-10-25: Sizes and scaling in the layout check are emulated (DevTools device metrics), not real window resizes,
+  so they don't depend on the runner's screen size.
+- 2026-10-25: Below 480px wide the page tabs show icons only (labels stay for screen readers and tooltips).
 - 2026-10-25: Icons are hand-copied Lucide paths (ISC licence, noted in NOTICE) rather than the `lucide` package, to
   keep dependencies few (CLAUDE.md).
 
@@ -77,7 +89,7 @@ Task 0: permissions, scheduled-task proposal, draft PR. Next step: add the permi
 
 ## Issues filed
 
-(none yet)
+- #125 Artist page and full-size Now Playing view (`needs-decision`, `ui`)
 
 ## Session log
 
