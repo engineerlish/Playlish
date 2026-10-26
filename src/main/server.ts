@@ -11,6 +11,8 @@ const STATIC_FILES: Record<string, string> = {
   '/ui.html': 'text/html; charset=utf-8',
   '/ui.js': 'text/javascript; charset=utf-8',
   '/ui.css': 'text/css; charset=utf-8',
+  '/inter-latin.woff2': 'font/woff2',
+  '/inter-latin-ext.woff2': 'font/woff2',
 };
 
 export interface ServerOptions {
