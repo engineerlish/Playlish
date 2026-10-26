@@ -94,10 +94,23 @@ function appPids(): number[] {
 
 /** Peak audio level of the app's audio sessions over a short window. */
 function meter(ms = 2000): number {
+  return meterReading(ms).peak;
+}
+
+/** The full meter reading: the peak and each of the app's audio sessions on the default output device. */
+function meterReading(ms = 2000): { peak: number; sessions: { muted: boolean; volume: number }[] } {
   const pids = appPids();
-  if (pids.length === 0) return 0;
+  if (pids.length === 0) return { peak: 0, sessions: [] };
   const out = execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'tools', 'smoke', 'audio-meter.ps1'), '-ProcessIds', pids.join(','), '-Milliseconds', String(ms)], { encoding: 'utf8' });
-  return (JSON.parse(out) as { peak: number }).peak;
+  return JSON.parse(out) as { peak: number; sessions: { muted: boolean; volume: number }[] };
+}
+
+/** Why silence may be Windows' doing, not Playlish's: its volume mixer entry muted or at 0 (Playlish never sets it). */
+function mixerHint(): string {
+  const sessions = meterReading(500).sessions;
+  if (sessions.length === 0) return ' (no Playlish audio session on the default output device: check the output device in Settings and in Windows)';
+  if (sessions.some((s) => s.muted || s.volume === 0)) return ' (Windows volume mixer has Playlish muted or at volume 0: unmute it in Settings > System > Sound > Volume mixer, or in your audio software)';
+  return '';
 }
 
 /** Log lines written since the given byte offset. */
@@ -247,7 +260,7 @@ async function playbackChecks(): Promise<void> {
   if (!playing) return;
 
   const peak = bestOf(3, 2000);
-  const sound = record({ id: 'audio', name: 'Real audio is playing', status: peak > SOUND ? 'pass' : 'fail', details: `audio meter peak ${peak}`, area: 'audio', severity: 'high' });
+  const sound = record({ id: 'audio', name: 'Real audio is playing', status: peak > SOUND ? 'pass' : 'fail', details: `audio meter peak ${peak}${peak > SOUND ? '' : mixerHint()}`, area: 'audio', severity: 'high' });
   if (sound.status === 'fail') return;
 
   await click(DEVTOOLS_PORT, 'toggle');
