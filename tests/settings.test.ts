@@ -31,6 +31,7 @@ describe('validateSettings', () => {
       eq: { enabled: true, preset: 'custom', custom: [3, 2, 1, 0, 0, 0, -1, -2, -3, 12] },
       window: { width: 1280, height: 800, x: -1200, y: 40, maximized: true },
       lastPage: 'search',
+      accent: 'teal',
       deviceVolumes: { 'speakers-1': 0.4, headphones: 1 },
     };
 
@@ -56,6 +57,8 @@ describe('validateSettings', () => {
     ['lastUpdateCheck', 'yesterday'],
     ['outputDevice', ''],
     ['outputDevice', 42],
+    ['accent', 'red'],
+    ['accent', 3],
     ['eq', { enabled: true, preset: 'loud', custom: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }],
     ['eq', { enabled: true, preset: 'flat', custom: [0, 0, 0] }],
     ['eq', { enabled: true, preset: 'flat', custom: [13, 0, 0, 0, 0, 0, 0, 0, 0, 0] }],

@@ -103,7 +103,7 @@ test.describe('search', () => {
 
     await ui.fill('#searchInput', 'zzzzqx');
 
-    await expect(ui.locator('#noResults')).toHaveText('No results for “zzzzqx”.');
+    await expect(ui.locator('#noResults .state-title')).toHaveText('No results for “zzzzqx”.');
   });
 
   test('an album opens from the results, and Back returns to them without searching again', async ({ start, fake }) => {

@@ -115,7 +115,7 @@ test.describe('library', () => {
     await expect.poll(() => fake.requestsFor('GET', '/v1/me/tracks').filter((r) => r.query.get('offset') === '600').length).toBeGreaterThanOrEqual(2);
     await expect(ui.locator('#list-tracks .row-title', { hasText: /^Liked Song 606$/ })).toBeVisible();
     expect(await ui.locator('#list-tracks').evaluate((el) => el.scrollTop)).toBe(top);
-    await expect(ui.locator('#list-tracks .row.loading')).toHaveCount(0);
+    await expect(ui.locator('#list-tracks .item.loading')).toHaveCount(0);
   });
 
   test("an album opens to its songs and plays from the chosen one; songs Spotify can't play are disabled", async ({ start, fake }) => {
@@ -140,7 +140,7 @@ test.describe('library', () => {
 
     await ui.locator('.row-main', { hasText: 'My Mix' }).click();
     await expect(ui.locator('.row-main', { hasText: 'Mix Song' })).toBeVisible();
-    await expect(ui.locator('.row.unavailable')).toHaveText('This song is no longer available');
+    await expect(ui.locator('.item.unavailable')).toHaveText('This song is no longer available');
     await ui.click('#libraryBack');
 
     await ui.locator('.row-main', { hasText: 'Their Mix' }).click();

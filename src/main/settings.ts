@@ -10,6 +10,7 @@ import * as path from 'node:path';
 
 export const SETTINGS_VERSION = 1;
 
+import { DEFAULT_ACCENT, isAccent, type Accent } from '../shared/accents';
 import { PAGES, isPage, type Page } from '../shared/pages';
 
 export { PAGES, type Page };
@@ -43,6 +44,8 @@ export interface Settings {
   eq: { enabled: boolean; preset: EqPreset; custom: number[] };
   window: WindowState;
   lastPage: Page;
+  /** The accent colour of the UI (Settings → Appearance). */
+  accent: Accent;
   /** Volume (0..1) remembered per audio output device id; used from 0.2.0. */
   deviceVolumes: Record<string, number>;
 }
@@ -60,6 +63,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   eq: Object.freeze({ enabled: false, preset: 'flat', custom: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }),
   window: Object.freeze({ width: 1100, height: 720, x: null, y: null, maximized: false }),
   lastPage: 'library',
+  accent: DEFAULT_ACCENT,
   deviceVolumes: Object.freeze({}) as Record<string, number>,
 });
 
@@ -173,6 +177,10 @@ export function validateSettings(input: unknown): { settings: Settings; problems
   if (raw['lastPage'] !== undefined) {
     if (isPage(raw['lastPage'])) settings.lastPage = raw['lastPage'];
     else bad('lastPage');
+  }
+  if (raw['accent'] !== undefined) {
+    if (isAccent(raw['accent'])) settings.accent = raw['accent'];
+    else bad('accent');
   }
   if (raw['deviceVolumes'] !== undefined) {
     const v = raw['deviceVolumes'];

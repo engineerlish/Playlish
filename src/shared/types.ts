@@ -3,6 +3,7 @@
  * This file must contain types only (no runtime code) so every build target can import it with `import type`.
  */
 
+import type { Accent } from './accents';
 import type { Page } from './pages';
 import type { PluginPanelView, PluginPrompt, PluginView } from './plugins';
 
@@ -276,6 +277,8 @@ export interface Snapshot {
   pluginPanels: PluginPanelView[];
   /** The tray and start-up options on the Settings page. */
   preferences: { closeToTray: boolean; minimizeToTray: boolean; startMinimized: boolean; checkForUpdates: boolean };
+  /** The accent colour of the UI. */
+  accent: Accent;
   /** Name of the chosen output device (#89), or null for the system default. */
   output: string | null;
   eq: EqView;
@@ -336,6 +339,8 @@ export interface UiApi {
   pluginUiAction(pluginId: string, slot: string, id: string, value: boolean | number | string | null): void;
   /** Turns a tray or start-up option on or off. */
   setPreference(key: 'closeToTray' | 'minimizeToTray' | 'startMinimized' | 'checkForUpdates', value: boolean): void;
+  /** Changes the accent colour of the UI. */
+  setAccent(accent: Accent): void;
   /** Opens the release page of the update in the browser. */
   openUpdate(): void;
   /** Plays on the output device with this name, or the system default (null). */

@@ -77,11 +77,15 @@ export function NowPlayingBar({ snapshot }: { snapshot: Snapshot }) {
           </div>
         )}
         <div class="meta">
-          <div id="track" class="title">{playback?.track ?? 'Nothing playing'}</div>
-          <div id="artists" class="muted">{playback?.artists ?? (snapshot.deviceReady ? 'Press play to continue where you left off' : ' ')}</div>
+          <div id="track" class="title" title={playback?.track}>
+            {playback?.track ?? 'Nothing playing'}
+          </div>
+          <div id="artists" class="muted" title={playback?.artists}>
+            {playback?.artists ?? (snapshot.deviceReady ? 'Press play to continue where you left off' : ' ')}
+          </div>
           {playback?.source === 'elsewhere' && (
-            <div id="device" class="device">
-              <Icon name="device" /> Playing on {playback.deviceName}
+            <div id="device" class="device" title={`Playing on ${playback.deviceName}`}>
+              <Icon name="device" /> <span class="truncate">Playing on {playback.deviceName}</span>
             </div>
           )}
         </div>
@@ -103,7 +107,7 @@ export function NowPlayingBar({ snapshot }: { snapshot: Snapshot }) {
           />
           <button
             id="fade"
-            class="text"
+            class="text pill"
             disabled={!hasTrack}
             title={playback?.source === 'elsewhere' ? 'Fades work on this device only; this pauses or plays' : 'Pause or play with a fade'}
             onClick={() => send({ type: 'fadeToggle' })}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { AlbumRow, LibraryAction, LibraryList, LibraryRow, PlaylistRow, TrackRow } from '../../../shared/types';
 import { Icon } from '../Icon';
+import { StateMessage } from '../StateMessage';
 import { usePagedList } from '../usePagedList';
 import { VirtualList } from '../VirtualList';
 
@@ -56,15 +57,14 @@ export function LibraryPage() {
   if (detail) return <DetailView detail={detail} onBack={() => setDetail(null)} status={status} say={setStatus} />;
   return (
     <div id="page-library" class="library">
-      <h1>Library</h1>
-      <div class="tabs" role="tablist" aria-label="Library">
+      <div class="segmented" role="tablist" aria-label="Library">
         {TABS.map((t) => (
-          <button key={t.id} id={`tab-${t.id}`} role="tab" class={`tab${tab === t.id ? ' current' : ''}`} aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+          <button key={t.id} id={`tab-${t.id}`} role="tab" class="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}
       </div>
-      <p class="muted library-status" role="status">
+      <p class="muted library-status truncate" role="status" title={status}>
         {status}
       </p>
       <ListView key={tab} list={{ kind: tab }} say={setStatus} onOpen={setDetail} />
@@ -76,33 +76,48 @@ export function DetailView({ detail, onBack, status, say, backLabel = 'Library' 
   const row = detail.row;
   const list: LibraryList = detail.kind === 'album' ? { kind: 'album', id: row.id } : { kind: 'playlist', id: row.id, snapshotId: detail.row.snapshotId };
   const canList = detail.kind === 'album' || detail.row.canList;
+  const byline = detail.kind === 'album' ? detail.row.artists : `Playlist by ${detail.row.owner}`;
   return (
     <div id="page-library" class="library">
       <button id="libraryBack" class="text" onClick={onBack}>
-        ← {backLabel}
+        <Icon name="back" />
+        {backLabel}
       </button>
       <div class="detail-head">
         <Art url={row.artUrl} />
         <div class="meta">
-          <h1 id="detailTitle">{row.name}</h1>
-          <div class="muted">{detail.kind === 'album' ? detail.row.artists : `Playlist by ${detail.row.owner}`}</div>
+          <h2 id="detailTitle" title={row.name}>
+            {row.name}
+          </h2>
+          <div class="muted" title={byline}>
+            {byline}
+          </div>
         </div>
-        <button id="playContext" class="primary" onClick={() => void run({ type: 'play', contextUri: row.uri }, say, `Playing ${row.name}.`)}>
+        <button id="playContext" class="primary pill" onClick={() => void run({ type: 'play', contextUri: row.uri }, say, `Playing ${row.name}.`)}>
+          <Icon name="play" />
           Play
         </button>
       </div>
-      <p class="muted library-status" role="status">
+      <p class="muted library-status truncate" role="status" title={status}>
         {status}
       </p>
       {canList ? (
         <ListView list={list} say={say} contextUri={row.uri} />
       ) : (
-        <p id="othersNote" class="card">
-          Spotify only lets apps list the songs of your own and collaborative playlists. Press Play to listen to this one.
-        </p>
+        <StateMessage id="othersNote" kind="empty" icon="note" title="Songs not available">
+          <p>Spotify only lets apps list the songs of your own and collaborative playlists. Press Play to listen to this one.</p>
+        </StateMessage>
       )}
     </div>
   );
+}
+
+/** What an empty list says. */
+function emptyText(list: LibraryList): string {
+  if (list.kind === 'tracks') return 'No liked songs yet.';
+  if (list.kind === 'albums') return 'No saved albums yet.';
+  if (list.kind === 'playlists') return 'No playlists yet.';
+  return 'Nothing here.';
 }
 
 function ListView({ list, say, onOpen, contextUri }: { list: LibraryList; say: (t: string) => void; onOpen?: (d: Detail) => void; contextUri?: string }) {
@@ -125,19 +140,19 @@ function ListView({ list, say, onOpen, contextUri }: { list: LibraryList; say: (
 
   const renderRow = (index: number) => {
     const row = paged.rowAt(index);
-    if (row === undefined) return <div class="row loading" aria-label="Loading" />;
-    if (row === null) return <div class="row unavailable muted">This song is no longer available</div>;
+    if (row === undefined) return <div class="item loading" aria-label="Loading" />;
+    if (row === null) return <div class="item unavailable muted">This song is no longer available</div>;
     return <RowView row={row} index={index} liked={liked} say={say} onPlay={playTrack} onOpen={onOpen} onRemoved={paged.reload} />;
   };
 
   if (paged.error && paged.total === null)
     return (
-      <p class="error-text" role="alert">
-        {paged.error}
-      </p>
+      <StateMessage kind="error" title="Could not load this list">
+        <p class="error-text">{paged.error}</p>
+      </StateMessage>
     );
-  if (paged.total === null) return <p class="muted">Loading…</p>;
-  if (paged.total === 0) return <p class="muted">{liked ? 'No liked songs yet.' : list.kind === 'albums' ? 'No saved albums yet.' : list.kind === 'playlists' ? 'No playlists yet.' : 'Nothing here.'}</p>;
+  if (paged.total === null) return <StateMessage kind="loading" title="Loading…" />;
+  if (paged.total === 0) return <StateMessage kind="empty" title={emptyText(list)} />;
   return <VirtualList id={`list-${list.kind}`} label={TABS.find((t) => t.id === list.kind)?.label ?? 'Songs'} count={paged.total} rowHeight={ROW_HEIGHT} renderRow={renderRow} onRange={want} />;
 }
 
@@ -152,38 +167,43 @@ export function RowView(props: {
 }) {
   const { row, say } = props;
   if (row.kind === 'track') {
+    const sub = row.album ? `${row.artists} · ${row.album}` : row.artists;
     return (
-      <div class={`row${row.playable ? '' : ' unavailable'}`}>
+      <div class={`item${row.playable ? '' : ' unavailable'}`}>
         <button class="row-main" disabled={!row.playable} title={row.playable ? `Play ${row.name}` : 'Spotify cannot play this song'} onClick={() => props.onPlay(row, props.index)}>
           <Art url={row.artUrl} />
           <span class="row-text">
             <span class="row-title-line">
-              <span class="row-title">{row.name}</span>
+              <span class="row-title" title={row.name}>
+                {row.name}
+              </span>
               {row.explicit && (
                 <span class="badge" title="Explicit" aria-label="Explicit">
                   E
                 </span>
               )}
             </span>
-            <span class="muted">{row.album ? `${row.artists} · ${row.album}` : row.artists}</span>
+            <span class="muted" title={sub}>
+              {sub}
+            </span>
           </span>
           <span class="muted time">{clock(row.durationMs)}</span>
         </button>
-        <button class="icon small" aria-label={`Add ${row.name} to the queue`} title="Add to queue" disabled={!row.playable} onClick={() => void run({ type: 'queue', uri: row.uri }, say, `Added ${row.name} to the queue.`)}>
-          +
+        <button class="icon row-action" aria-label={`Add ${row.name} to the queue`} title="Add to queue" disabled={!row.playable} onClick={() => void run({ type: 'queue', uri: row.uri }, say, `Added ${row.name} to the queue.`)}>
+          <Icon name="plus" />
         </button>
         {props.liked ? (
           <button
-            class="icon small on"
+            class="icon row-action on"
             aria-label={`Remove ${row.name} from Liked Songs`}
             title="Remove from Liked Songs"
             onClick={() => void run({ type: 'remove', uris: [row.uri] }, say, `Removed ${row.name} from Liked Songs.`).then((ok) => ok && props.onRemoved())}
           >
-            ♥
+            <Icon name="heart" filled />
           </button>
         ) : (
-          <button class="icon small" aria-label={`Save ${row.name} to Liked Songs`} title="Save to Liked Songs" onClick={() => void run({ type: 'save', uris: [row.uri] }, say, `Saved ${row.name} to Liked Songs.`)}>
-            ♡
+          <button class="icon row-action" aria-label={`Save ${row.name} to Liked Songs`} title="Save to Liked Songs" onClick={() => void run({ type: 'save', uris: [row.uri] }, say, `Saved ${row.name} to Liked Songs.`)}>
+            <Icon name="heart" />
           </button>
         )}
       </div>
@@ -192,11 +212,13 @@ export function RowView(props: {
   if (row.kind === 'artist') {
     // No artist page yet: an artist row plays the artist.
     return (
-      <div class="row">
+      <div class="item">
         <button class="row-main" title={`Play ${row.name}`} onClick={() => void run({ type: 'play', contextUri: row.uri }, say, `Playing ${row.name}.`)}>
           <Art url={row.artUrl} />
           <span class="row-text">
-            <span class="row-title">{row.name}</span>
+            <span class="row-title" title={row.name}>
+              {row.name}
+            </span>
             <span class="muted">Artist</span>
           </span>
         </button>
@@ -205,15 +227,19 @@ export function RowView(props: {
   }
   const sub = row.kind === 'album' ? row.artists : `${row.owner} · ${row.total} ${row.total === 1 ? 'song' : 'songs'}`;
   return (
-    <div class="row">
+    <div class="item">
       <button class="row-main" title={`Open ${row.name}`} onClick={() => props.onOpen?.(row.kind === 'album' ? { kind: 'album', row } : { kind: 'playlist', row })}>
         <Art url={row.artUrl} />
         <span class="row-text">
-          <span class="row-title">{row.name}</span>
-          <span class="muted">{sub}</span>
+          <span class="row-title" title={row.name}>
+            {row.name}
+          </span>
+          <span class="muted" title={sub}>
+            {sub}
+          </span>
         </span>
       </button>
-      <button class="icon small" aria-label={`Play ${row.name}`} title="Play" onClick={() => void run({ type: 'play', contextUri: row.uri }, say, `Playing ${row.name}.`)}>
+      <button class="icon row-action" aria-label={`Play ${row.name}`} title="Play" onClick={() => void run({ type: 'play', contextUri: row.uri }, say, `Playing ${row.name}.`)}>
         <Icon name="play" />
       </button>
     </div>

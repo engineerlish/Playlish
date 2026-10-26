@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { LibraryRow, SearchKind, TrackRow } from '../../../shared/types';
+import { Icon } from '../Icon';
+import { StateMessage } from '../StateMessage';
 import { DetailView, RowView, run, type Detail } from './LibraryPage';
 
 /*
@@ -54,31 +56,35 @@ export function SearchPage() {
       {/* Results stay mounted under an open album or playlist, so Back returns to them without searching again. */}
       {detail && <DetailView detail={detail} onBack={() => setDetail(null)} status={status} say={setStatus} backLabel="Search results" />}
       <div class={detail ? 'hidden' : 'search-body'}>
-        <h1>Search</h1>
-        <input
-          id="searchInput"
-          ref={input}
-          type="search"
-          placeholder="Songs, albums, artists or playlists"
-          aria-label="Search Spotify"
-          autoComplete="off"
-          spellcheck={false}
-          maxLength={200}
-          value={text}
-          onInput={(e) => setText((e.target as HTMLInputElement).value)}
-        />
-        <p class="muted library-status" role="status">
+        <div class="search-field">
+          <Icon name="search" />
+          <input
+            id="searchInput"
+            ref={input}
+            type="search"
+            placeholder="Songs, albums, artists or playlists"
+            aria-label="Search Spotify"
+            autoComplete="off"
+            spellcheck={false}
+            maxLength={200}
+            value={text}
+            onInput={(e) => setText((e.target as HTMLInputElement).value)}
+          />
+        </div>
+        <p class="muted library-status truncate" role="status" title={status}>
           {status}
         </p>
         {query === '' ? (
-          <p class="muted">Search for songs, albums, artists and playlists.</p>
+          <StateMessage kind="empty" icon="search" title="Search Spotify">
+            <p>Find songs, albums, artists and playlists.</p>
+          </StateMessage>
         ) : (
           SECTIONS.map((s) => <Section key={`${s.kind}:${query}`} kind={s.kind} title={s.title} query={query} say={setStatus} onOpen={setDetail} onEmpty={reportEmpty} />)
         )}
         {query !== '' && empty.query === query && empty.kinds.length === SECTIONS.length && (
-          <p id="noResults" class="muted">
-            No results for “{query}”.
-          </p>
+          <StateMessage id="noResults" kind="empty" icon="search" title={`No results for “${query}”.`}>
+            <p>Check the spelling, or try fewer or different words.</p>
+          </StateMessage>
         )}
       </div>
     </div>
@@ -127,11 +133,7 @@ function Section(props: { kind: SearchKind; title: string; query: string; say: (
   return (
     <section class="search-section" id={`results-${kind}`} aria-label={title}>
       <h2>{title}</h2>
-      {state.error && (
-        <p class="error-text" role="alert">
-          {state.error}
-        </p>
-      )}
+      {state.error && <StateMessage kind="error" compact title={state.error} />}
       <ul class="plain">
         {state.rows.map((row, i) => (
           <li key={`${row.uri}:${i}`} class="search-row">
@@ -139,7 +141,7 @@ function Section(props: { kind: SearchKind; title: string; query: string; say: (
           </li>
         ))}
       </ul>
-      {state.total === null && !state.error && <p class="muted">Searching…</p>}
+      {state.total === null && !state.error && <StateMessage kind="loading" compact title="Searching…" />}
       {more && (
         <button id={`more-${kind}`} class="text" disabled={state.loading} onClick={() => load(state.next)}>
           {state.loading ? 'Loading…' : `More ${title.toLowerCase()}`}

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- A new look in the spirit of a native macOS app: a frosted sidebar (Windows 11's Mica material, solid where that isn't available or transparency effects are off), a unified title bar with the page name, hairline separators, rounded cards, switches, a segmented control in the Library, pill buttons, popovers and quick, subtle animations (off when Windows asks for reduced motion). Light and dark follow Windows. The text font is Inter (bundled), with the system font for other scripts; icons are from Lucide.
+- Accent colour (Settings → Appearance): blue, purple, pink, orange, green, teal or graphite. Plugin panels use it too.
+- Designed loading, empty and error states on every page, and full-text tooltips wherever a long title, artist, playlist or device name is cut short.
+
 - Example plugins (`examples/`): Listening stats (your top artists and tracks from what you played recently, below the sidebar), Smart shuffle (queues a mix from your liked songs, without repeats from your last mixes and never two songs by the same artist in a row) and EQ by playlist (switches the equalizer preset when a chosen playlist plays), plus a template. The plugin guide is `docs/PLUGINS.md`, and `npm run plugin:pack` packs a plugin folder into a `.playlish` file, checked as Playlish checks it at install.
 - Plugin API: `library.playlists`, `history.recent` (recently played), and the playing context (album or playlist) in playback data. Listening history needs a new Spotify permission, so Playlish asks you to log in once more.
 - Plugin panels: a plugin can show a small panel on the Plugins page or below the sidebar, made of text, lists, buttons, switches, sliders and choices. Playlish draws it with its own controls, so no plugin code runs in the window, and clicks and changes go back to the plugin after Playlish checks them against what it showed.
@@ -20,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Library rows and button rows shared one style name, so list rows picked up the button rows' top margin and wrapping.
+- The smoke test now says when Windows' volume mixer has Playlish muted or at volume 0, instead of only reporting silence.
 - Plugins that are on now start once your saved Spotify session is back (when the player is ready, at most 15 seconds after start), and start again after you log in, so a plugin that reads your library when it starts (like EQ by playlist) no longer shows an error until the next restart.
 - After moving playback to another device, the bar shows where it plays ("Playing on …") instead of this computer's paused track.
 

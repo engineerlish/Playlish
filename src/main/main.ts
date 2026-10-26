@@ -1,8 +1,9 @@
-import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, safeStorage, screen, session as electronSession, shell, utilityProcess } from 'electron';
+import { BrowserWindow, Menu, type MenuItemConstructorOptions, Tray, app, clipboard, components, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, session as electronSession, shell, utilityProcess } from 'electron';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DEFAULT_ACCENT, isAccent } from '../shared/accents';
 import { isPage } from '../shared/pages';
 import type { PluginPanelView } from '../shared/plugins';
 import type { PlaybackState, PlayerCommand, SetupAction, Snapshot } from '../shared/types';
@@ -411,6 +412,7 @@ function snapshot(): Snapshot {
       startMinimized: settings?.get().startMinimized ?? false,
       checkForUpdates: settings?.get().checkForUpdates ?? true,
     },
+    accent: settings?.get().accent ?? DEFAULT_ACCENT,
     update: update && settings?.get().checkForUpdates ? { version: update.version } : null,
     output: settings?.get().outputDevice ?? null,
     eq: equalizer.view(),
@@ -475,6 +477,23 @@ function closeUi(): void {
   uiWindow.close();
 }
 
+// CHANGE HERE: window colours behind the page (match --window and --bg in ui.css) and the title bar height (--toolbar-height).
+const WINDOW_COLORS = { light: { window: '#ececee', bar: '#ffffff', symbols: '#1d1d1f' }, dark: { window: '#232325', bar: '#1e1e20', symbols: '#f5f5f7' } };
+const TITLE_BAR_HEIGHT = 52;
+
+/** Colours for the current Windows theme. */
+function windowColors(): (typeof WINDOW_COLORS)['light'] {
+  return nativeTheme.shouldUseDarkColors ? WINDOW_COLORS.dark : WINDOW_COLORS.light;
+}
+
+/**
+ * Windows 11 22H2 (build 22621) and later draw the Mica material behind the sidebar. Off in test mode, so screenshots
+ * and contrast checks see the solid fallback colours.
+ */
+function useWindowMaterial(): boolean {
+  return process.platform === 'win32' && Number(os.release().split('.')[2] ?? 0) >= 22621 && !e2e;
+}
+
 /** Opens the UI window, or focuses it if it already exists. */
 function openUi(): void {
   if (uiWindow && !uiWindow.isDestroyed()) {
@@ -488,6 +507,7 @@ function openUi(): void {
   const primary = screen.getPrimaryDisplay();
   const areas = [primary, ...screen.getAllDisplays().filter((d) => d.id !== primary.id)].map((d) => d.workArea);
   const fitted = saved ? fitWindowState(saved, areas) : null;
+  const material = useWindowMaterial();
   uiWindow = new BrowserWindow({
     width: fitted?.width ?? 1100,
     height: fitted?.height ?? 720,
@@ -497,9 +517,13 @@ function openUi(): void {
     minHeight: 360,
     title: 'Playlish',
     autoHideMenuBar: true,
-    // Shown once the page has drawn, so the window never flashes white.
+    // A unified title bar: the page draws it (sidebar top and toolbar), Windows draws only the caption buttons.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: windowColors().bar, symbolColor: windowColors().symbols, height: TITLE_BAR_HEIGHT },
+    ...(material ? { backgroundMaterial: 'mica' as const } : {}),
+    // Shown once the page has drawn, so the window never flashes.
     show: false,
-    backgroundColor: '#121212',
+    backgroundColor: windowColors().window,
     webPreferences: {
       preload: path.join(__dirname, '../preload/ui-preload.js'),
       contextIsolation: true,
@@ -548,7 +572,15 @@ function openUi(): void {
     // Milestone read by the performance harness (tools/perf): time from process start to a usable UI.
     log.info('UI ready', { code: 'STARTUP_UI', context: { msSinceStart: Math.round(performance.now()) } });
   });
-  void uiWindow.loadURL(`http://127.0.0.1:${serverPort}/ui.html`);
+  // The caption buttons follow the Windows theme with the page.
+  const followTheme = () => {
+    if (win.isDestroyed()) return;
+    win.setTitleBarOverlay({ color: windowColors().bar, symbolColor: windowColors().symbols, height: TITLE_BAR_HEIGHT });
+    win.setBackgroundColor(windowColors().window);
+  };
+  nativeTheme.on('updated', followTheme);
+  win.on('closed', () => nativeTheme.off('updated', followTheme));
+  void uiWindow.loadURL(`http://127.0.0.1:${serverPort}/ui.html${material ? '?material=1' : ''}`);
 }
 
 /**
@@ -1070,6 +1102,11 @@ function registerIpc(): void {
   ipcMain.on('ui:open-update', () => {
     // The address was checked when the release was read: only this project's release pages.
     if (update) void openInBrowser(update.url);
+  });
+  ipcMain.on('ui:set-accent', (_event, accent: unknown) => {
+    if (!isAccent(accent)) return;
+    settings?.update({ accent });
+    pushSnapshot();
   });
   ipcMain.on('ui:set-preference', (_event, key: unknown, value: unknown) => {
     if (!isPreferenceKey(key) || typeof value !== 'boolean') return;
