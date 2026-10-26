@@ -53,15 +53,16 @@ every completed task.
 - [x] Plugin panels use the tokens (sidebar and page panels)
 
 ### 5. Measure and finish
-- [ ] Idle memory before (main) and after, in the PR
+- [x] Idle memory before (main) and after, in the PR (idle unchanged; UI open +2 MB, within run-to-run noise)
 - [ ] CI green
-- [ ] Issues filed for out-of-scope bugs (linked below)
+- [x] Issues filed for out-of-scope bugs (linked below)
 - [ ] Scheduled task deleted, PR marked ready for review
 
 ## In progress
 
-Task 5: memory after the change (perf idle/ui, 2 runs each, compare with the baseline below), then CI green on #124.
-Next step: put the numbers in the PR, wait for CI, fix anything red.
+Task 5: CI green on #124. Blocked: the dependency audit fails on every branch since 2026-10-22 (Electron advisories);
+#126 (castLabs Electron 44.9.3) fixes it and waits for the owner. Next step: once #126 is merged, sync this branch with
+main, rerun CI, then mark #124 ready for review.
 
 Baseline on main (2026-10-25, this machine, 2 runs): idle tray 78.2 / 78.3 MB, UI open 120.8 / 122.6 MB.
 
@@ -89,11 +90,14 @@ Baseline on main (2026-10-25, this machine, 2 runs): idle tray 78.2 / 78.3 MB, U
 
 ## Issues filed
 
+- #126 PR: castLabs Electron 44.9.3 (fixes the failing audit; needs owner approval and a smoke run)
 - #125 Artist page and full-size Now Playing view (`needs-decision`, `ui`)
 
 ## Session log
 
 ### 2026-10-25, session 1
-- Done: resume system files, branch.
+- Done: resume system, smoke diagnosis (Windows mixer mute) and smoke hint, design tokens, Inter + Lucide, unified
+  title bar with Mica, accent setting, every screen restyled, states and tooltips, layout check (sizes x scales,
+  stress data) in CI, memory A/B (3 rounds), #125 filed, #126 opened.
 - Next: see "In progress".
 - Needs the owner: approve the scheduled task; unmute Playlish in the Windows volume mixer and rerun `npm run smoke`.
