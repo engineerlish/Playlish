@@ -92,6 +92,19 @@ function appPids(): number[] {
   }
 }
 
+/**
+ * Process ids of an installed Playlish (a release, Playlish.exe). It shares the profile and holds the single-instance
+ * lock, so while it runs the build under test quits at once without logging anything.
+ */
+function installedPids(): number[] {
+  try {
+    const out = execFileSync('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='Playlish.exe'" | ForEach-Object { $_.ProcessId }`], { encoding: 'utf8' });
+    return out.split(/\s+/).filter(Boolean).map(Number);
+  } catch {
+    return [];
+  }
+}
+
 /** Peak audio level of the app's audio sessions over a short window. */
 function meter(ms = 2000): number {
   return meterReading(ms).peak;
@@ -217,12 +230,16 @@ function preconditions(): boolean {
 
 /** Starts the app with the DevTools port and checks login, playback and audio. */
 async function playbackChecks(): Promise<void> {
-  while (appPids().length > 0) {
+  while (appPids().length > 0 || installedPids().length > 0) {
     if (!interactive) {
       record({ id: 'launch', name: 'Launch Playlish', status: 'skipped', details: 'Playlish is already running', area: 'ui', severity: 'medium' });
       return;
     }
-    await pause('Playlish is already running. Quit it from the tray icon (right-click, Quit).');
+    await pause(
+      installedPids().length > 0
+        ? 'The installed Playlish is running and would block the build under test. Quit it from the tray icon (right-click, Quit).'
+        : 'Playlish is already running. Quit it from the tray icon (right-click, Quit).',
+    );
   }
 
   const offset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
