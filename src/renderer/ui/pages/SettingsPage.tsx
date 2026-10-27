@@ -1,3 +1,4 @@
+import { ACCENTS, ACCENT_LABELS, type Accent } from '../../../shared/accents';
 import type { Snapshot } from '../../../shared/types';
 import { AudioSettings } from '../AudioSettings';
 
@@ -16,12 +17,45 @@ const PREFERENCES: { key: PreferenceKey; id: string; label: string; hint: string
   },
 ];
 
-/** Account, diagnostics and the resource readout. Audio settings arrive in 0.2.0. */
+/** The accent colour: one swatch per choice, a radio group (arrow keys move between them). */
+function AccentPicker({ accent }: { accent: Accent }) {
+  const move = (e: KeyboardEvent, at: number) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    const next = ACCENTS[(at + step + ACCENTS.length) % ACCENTS.length] ?? accent;
+    window.ui.setAccent(next);
+    document.getElementById(`accent-${next}`)?.focus();
+  };
+  return (
+    <div class="field">
+      <span id="accentLabel">Accent colour</span>
+      <div class="swatches" role="radiogroup" aria-labelledby="accentLabel">
+        {ACCENTS.map((a, i) => (
+          <button
+            key={a}
+            id={`accent-${a}`}
+            class="swatch"
+            data-accent={a}
+            role="radio"
+            aria-checked={a === accent}
+            aria-label={ACCENT_LABELS[a]}
+            title={ACCENT_LABELS[a]}
+            tabIndex={a === accent ? 0 : -1}
+            onClick={() => window.ui.setAccent(a)}
+            onKeyDown={(e) => move(e, i)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Account, appearance, audio, tray and start-up, diagnostics and the resource readout. */
 export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
   const m = snapshot.metrics;
   return (
-    <div id="page-settings">
-      <h1>Settings</h1>
+    <div id="page-settings" class="settings">
 
       <section class="card">
         <h2>Account</h2>
@@ -40,6 +74,12 @@ export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
             </button>
           )}
         </div>
+      </section>
+
+      <section class="card">
+        <h2>Appearance</h2>
+        <p class="muted">Light and dark follow your Windows setting.</p>
+        <AccentPicker accent={snapshot.accent} />
       </section>
 
       <AudioSettings output={snapshot.output} eq={snapshot.eq} />
@@ -77,7 +117,7 @@ export function SettingsPage({ snapshot }: { snapshot: Snapshot }) {
 
       <section class="card">
         <h2>Resources</h2>
-        <p id="metrics" class="muted">
+        <p id="metrics" class="muted metrics">
           {m ? `${m.processes} processes · private memory ${m.privateMb} MB · working set ${m.workingSetMb} MB · CPU ${m.cpuPercent}%` : 'Waiting for the first sample…'}
         </p>
         <p class="muted">

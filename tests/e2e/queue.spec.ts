@@ -61,6 +61,6 @@ test.describe('queue', () => {
 
     await ui.click('#nav-queue');
 
-    await expect(ui.locator('#page-queue .error-text')).toBeVisible({ timeout: 20_000 });
+    await expect(ui.locator('#page-queue .state.error')).toBeVisible({ timeout: 20_000 });
   });
 });

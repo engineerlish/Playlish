@@ -149,6 +149,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/issues/ci-report.ts --playwright e2e-results/results.json
 
+      # The layout check's screenshots (every screen at every size, and in dark mode), for reviewing UI changes.
+      - name: Upload layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: layout-screenshots
+          path: e2e-results/artifacts/**/layout/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
       # Screenshots, app logs and Playwright traces of failed tests (open a trace with npx playwright show-trace).
       - name: Upload failure artifacts
         if: failure()

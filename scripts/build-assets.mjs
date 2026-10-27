@@ -9,6 +9,11 @@ for (const file of ['host.html', 'ui.html', 'ui.css']) {
   copyFileSync(`src/renderer/${file}`, `dist/web/renderer/${file}`);
 }
 
+// The UI font, Inter (SIL OFL 1.1): Latin and Latin Extended only (see @font-face in ui.css).
+const INTER = 'node_modules/@fontsource-variable/inter/files';
+copyFileSync(`${INTER}/inter-latin-wght-normal.woff2`, 'dist/web/renderer/inter-latin.woff2');
+copyFileSync(`${INTER}/inter-latin-ext-wght-normal.woff2`, 'dist/web/renderer/inter-latin-ext.woff2');
+
 /** CRC-32 of a buffer, as required by PNG chunks. */
 function crc32(buf) {
   let crc = 0xffffffff;

@@ -26,5 +26,7 @@ function forwardPageErrors(report: (message: string, stack?: string) => void): v
 }
 
 forwardPageErrors((message, stack) => window.ui.reportError(message, stack));
+// The window material (Mica) shows through the page only when the main process turned it on.
+if (new URLSearchParams(location.search).get('material') === '1') document.documentElement.classList.add('material');
 const root = document.getElementById('app');
 if (root) render(<App />, root);

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { QueueResult, Snapshot, TrackRow } from '../../../shared/types';
+import { Icon } from '../Icon';
+import { StateMessage } from '../StateMessage';
 import { RowView, run } from './LibraryPage';
 
 /*
@@ -29,31 +31,34 @@ export function QueuePage({ snapshot }: { snapshot: Snapshot }) {
   return (
     <div id="page-queue" class="library search">
       <div class="search-body">
-        <div class="row-head">
-          <h1>Queue</h1>
+        <div class="page-head">
+          <p class="muted library-status truncate" role="status" title={status}>
+            {status}
+          </p>
+          <span class="spacer" />
           <button id="refreshQueue" class="text" disabled={loading} onClick={load}>
+            <Icon name="refresh" />
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
-        <p class="muted library-status" role="status">
-          {status}
-        </p>
         {queue === null ? (
-          <p class="muted">Loading…</p>
+          <StateMessage kind="loading" title="Loading the queue…" />
         ) : !queue.ok ? (
-          <p class="error-text" role="alert">
-            {queue.error}
-          </p>
+          <StateMessage kind="error" title="Could not load the queue">
+            <p class="error-text">{queue.error}</p>
+          </StateMessage>
         ) : (
           <>
             <section class="search-section" id="queue-now" aria-label="Now playing">
               <h2>Now playing</h2>
-              {queue.current ? <div class="search-row">{rowFor(queue.current, 0)}</div> : <p class="muted">Nothing is playing.</p>}
+              {queue.current ? <div class="search-row">{rowFor(queue.current, 0)}</div> : <StateMessage kind="empty" icon="note" compact title="Nothing is playing." />}
             </section>
             <section class="search-section" id="queue-next" aria-label="Next up">
               <h2>Next up</h2>
               {queue.next.length === 0 ? (
-                <p class="muted">Nothing queued. Use + on any song to add it.</p>
+                <StateMessage kind="empty" icon="queue" compact title="Nothing queued.">
+                  <p>Use + on any song to add it.</p>
+                </StateMessage>
               ) : (
                 <ol class="plain">
                   {queue.next.map((row, i) => (

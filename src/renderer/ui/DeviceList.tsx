@@ -1,10 +1,19 @@
 import type { DeviceInfo, DevicesView } from '../../shared/types';
 import { Icon } from './Icon';
+import { StateMessage } from './StateMessage';
 
 /** One line per device; the active one is marked, restricted ones cannot be picked. Used by the page and the picker. */
 export function DeviceList({ view, idPrefix }: { view: DevicesView; idPrefix: string }) {
-  if (view.list === null) return <p class="muted">{view.loading ? 'Looking for your devices…' : (view.error ?? 'No devices loaded yet.')}</p>;
-  if (view.list.length === 0) return <p class="muted">No devices found. Open Spotify on a phone, speaker or computer and refresh.</p>;
+  if (view.list === null) {
+    if (view.loading) return <StateMessage kind="loading" compact title="Looking for your devices…" />;
+    return view.error ? <StateMessage kind="error" compact title={view.error} /> : <StateMessage kind="empty" compact icon="device" title="No devices loaded yet." />;
+  }
+  if (view.list.length === 0)
+    return (
+      <StateMessage kind="empty" compact icon="device" title="No devices found.">
+        <p>Open Spotify on a phone, speaker or computer and refresh.</p>
+      </StateMessage>
+    );
   return (
     <ul class="devices" aria-label="Spotify Connect devices">
       {view.list.map((d) => (
@@ -24,7 +33,7 @@ function DeviceButton({ device, busy, moving, idPrefix }: { device: DeviceInfo; 
       class={`device-row${device.active ? ' active' : ''}`}
       disabled={busy || device.active || device.restricted}
       aria-current={device.active ? 'true' : undefined}
-      title={device.active ? 'Already playing on this device' : `Play on ${device.name}`}
+      title={device.active ? `${device.name}: already playing on this device` : `Play on ${device.name}`}
       onClick={() => window.ui.transfer(device.id)}
     >
       <Icon name="device" />

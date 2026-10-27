@@ -92,12 +92,38 @@ function appPids(): number[] {
   }
 }
 
+/**
+ * Process ids of an installed Playlish (a release, Playlish.exe). It shares the profile and holds the single-instance
+ * lock, so while it runs the build under test quits at once without logging anything.
+ */
+function installedPids(): number[] {
+  try {
+    const out = execFileSync('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='Playlish.exe'" | ForEach-Object { $_.ProcessId }`], { encoding: 'utf8' });
+    return out.split(/\s+/).filter(Boolean).map(Number);
+  } catch {
+    return [];
+  }
+}
+
 /** Peak audio level of the app's audio sessions over a short window. */
 function meter(ms = 2000): number {
+  return meterReading(ms).peak;
+}
+
+/** The full meter reading: the peak and each of the app's audio sessions on the default output device. */
+function meterReading(ms = 2000): { peak: number; sessions: { muted: boolean; volume: number }[] } {
   const pids = appPids();
-  if (pids.length === 0) return 0;
+  if (pids.length === 0) return { peak: 0, sessions: [] };
   const out = execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'tools', 'smoke', 'audio-meter.ps1'), '-ProcessIds', pids.join(','), '-Milliseconds', String(ms)], { encoding: 'utf8' });
-  return (JSON.parse(out) as { peak: number }).peak;
+  return JSON.parse(out) as { peak: number; sessions: { muted: boolean; volume: number }[] };
+}
+
+/** Why silence may be Windows' doing, not Playlish's: its volume mixer entry muted or at 0 (Playlish never sets it). */
+function mixerHint(): string {
+  const sessions = meterReading(500).sessions;
+  if (sessions.length === 0) return ' (no Playlish audio session on the default output device: check the output device in Settings and in Windows)';
+  if (sessions.some((s) => s.muted || s.volume === 0)) return ' (Windows volume mixer has Playlish muted or at volume 0: unmute it in Settings > System > Sound > Volume mixer, or in your audio software)';
+  return '';
 }
 
 /** Log lines written since the given byte offset. */
@@ -167,9 +193,12 @@ function preconditions(): boolean {
       ? { ...vmp, status: 'pass', details: (out.trim().split(/\r?\n/).pop() ?? '').replace(/^\s*-\s*/, '') }
       : { ...vmp, status: 'fail', details: out.trim() };
   } catch (err) {
-    const e = err as { stderr?: Buffer | string; message?: string };
-    const text = typeof e.stderr === 'string' ? e.stderr : e.stderr ? e.stderr.toString('utf8') : (e.message ?? '');
+    // castlabs-evs prints its errors to stdout, Python's own (a missing module) to stderr: read both.
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+    const text = `${e.stdout?.toString() ?? ''}\n${e.stderr?.toString() ?? ''}`.trim() || (e.message ?? '');
     if (/development only/i.test(text)) vmp = { ...vmp, status: 'fail', details: 'Development-only signature: sign with castlabs_evs.vmp sign-pkg (see docs/DEVELOPMENT.md).' };
+    // Anything but a missing castlabs-evs or Python is a real failure (an invalid or expired signature).
+    else if (!/No module named|No suitable Python|not found/i.test(text)) vmp = { ...vmp, status: 'fail', details: text.split(/\r?\n/).pop() ?? text };
   }
   record(vmp);
 
@@ -204,12 +233,16 @@ function preconditions(): boolean {
 
 /** Starts the app with the DevTools port and checks login, playback and audio. */
 async function playbackChecks(): Promise<void> {
-  while (appPids().length > 0) {
+  while (appPids().length > 0 || installedPids().length > 0) {
     if (!interactive) {
       record({ id: 'launch', name: 'Launch Playlish', status: 'skipped', details: 'Playlish is already running', area: 'ui', severity: 'medium' });
       return;
     }
-    await pause('Playlish is already running. Quit it from the tray icon (right-click, Quit).');
+    await pause(
+      installedPids().length > 0
+        ? 'The installed Playlish is running and would block the build under test. Quit it from the tray icon (right-click, Quit).'
+        : 'Playlish is already running. Quit it from the tray icon (right-click, Quit).',
+    );
   }
 
   const offset = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
@@ -247,7 +280,7 @@ async function playbackChecks(): Promise<void> {
   if (!playing) return;
 
   const peak = bestOf(3, 2000);
-  const sound = record({ id: 'audio', name: 'Real audio is playing', status: peak > SOUND ? 'pass' : 'fail', details: `audio meter peak ${peak}`, area: 'audio', severity: 'high' });
+  const sound = record({ id: 'audio', name: 'Real audio is playing', status: peak > SOUND ? 'pass' : 'fail', details: `audio meter peak ${peak}${peak > SOUND ? '' : mixerHint()}`, area: 'audio', severity: 'high' });
   if (sound.status === 'fail') return;
 
   await click(DEVTOOLS_PORT, 'toggle');

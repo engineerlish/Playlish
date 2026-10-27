@@ -20,7 +20,7 @@ test.describe('plugins', () => {
 
     await ui.click('#nav-plugins');
 
-    await expect(ui.locator('#noPlugins')).toHaveText('No plugins installed.');
+    await expect(ui.locator('#noPlugins .state-title')).toHaveText('No plugins installed.');
     await expect(ui.locator('#restartSafe')).toBeVisible();
     await expect(ui.locator('#safeModeBanner')).toHaveCount(0);
     expect(logEntries(userDataDir, 'SAFE_MODE')).toHaveLength(0);

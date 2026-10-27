@@ -13,6 +13,7 @@ const api: UiApi = {
   refreshDevices: () => ipcRenderer.send('ui:devices-refresh'),
   transfer: (deviceId) => ipcRenderer.send('ui:transfer', deviceId),
   setPreference: (key, value) => ipcRenderer.send('ui:set-preference', key, value),
+  setAccent: (accent) => ipcRenderer.send('ui:set-accent', accent),
   openUpdate: () => ipcRenderer.send('ui:open-update'),
   setOutput: (name) => ipcRenderer.send('ui:set-output', name),
   setEq: (change) => ipcRenderer.send('ui:set-eq', change),

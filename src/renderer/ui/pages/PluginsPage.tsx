@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { PLUGIN_PERMISSIONS, type PluginPrompt, type PluginView } from '../../../shared/plugins';
 import type { Snapshot } from '../../../shared/types';
 import { PluginPanel } from '../PluginPanel';
+import { StateMessage } from '../StateMessage';
 
 /*
  * Plugins (#50, #101): the plugin manager. Install a .playlish file after a permission prompt, turn plugins on and off,
@@ -70,7 +71,7 @@ function PluginRow({ plugin, safeMode }: { plugin: PluginView; safeMode: boolean
             onChange={(e) => window.ui.setPluginEnabled(plugin.id, (e.target as HTMLInputElement).checked)}
           />
           <span>
-            <span class="plugin-name">{plugin.name}</span> <span class="muted">{plugin.version}</span>
+            <span class="plugin-name">{plugin.name}</span> <span class="muted small">{plugin.version}</span>
             <span class="hint muted">By {plugin.author}</span>
           </span>
         </label>
@@ -85,7 +86,7 @@ function PluginRow({ plugin, safeMode }: { plugin: PluginView; safeMode: boolean
         {confirming ? (
           <>
             <span>Remove {plugin.name} and its data?</span>
-            <button class="confirm-uninstall" onClick={() => window.ui.uninstallPlugin(plugin.id)}>
+            <button class="confirm-uninstall danger" onClick={() => window.ui.uninstallPlugin(plugin.id)}>
               Uninstall
             </button>
             <button class="keep-plugin" onClick={() => setConfirming(false)}>
@@ -104,8 +105,7 @@ function PluginRow({ plugin, safeMode }: { plugin: PluginView; safeMode: boolean
 
 export function PluginsPage({ snapshot }: { snapshot: Snapshot }) {
   return (
-    <div id="page-plugins">
-      <h1>Plugins</h1>
+    <div id="page-plugins" class="settings">
       {snapshot.safeMode && (
         <div id="safeModeBanner" class="banner" role="status">
           <span>Safe mode: all plugins are off for this session.</span>
@@ -131,16 +131,17 @@ export function PluginsPage({ snapshot }: { snapshot: Snapshot }) {
           </div>
         ))}
       <section class="card">
-        <div class="row-head">
+        <div class="page-head">
           <h2>Installed</h2>
-          <button id="installPlugin" onClick={() => window.ui.installPlugin()}>
+          <span class="spacer" />
+          <button id="installPlugin" class="primary pill" onClick={() => window.ui.installPlugin()}>
             Install from file…
           </button>
         </div>
         {snapshot.plugins.length === 0 ? (
-          <p id="noPlugins" class="muted">
-            No plugins installed.
-          </p>
+          <StateMessage id="noPlugins" kind="empty" icon="plugins" compact title="No plugins installed.">
+            <p>Install a .playlish file to add one.</p>
+          </StateMessage>
         ) : (
           <ul id="pluginList" class="plugin-list">
             {snapshot.plugins.map((p) => (
