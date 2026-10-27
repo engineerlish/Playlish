@@ -193,9 +193,12 @@ function preconditions(): boolean {
       ? { ...vmp, status: 'pass', details: (out.trim().split(/\r?\n/).pop() ?? '').replace(/^\s*-\s*/, '') }
       : { ...vmp, status: 'fail', details: out.trim() };
   } catch (err) {
-    const e = err as { stderr?: Buffer | string; message?: string };
-    const text = typeof e.stderr === 'string' ? e.stderr : e.stderr ? e.stderr.toString('utf8') : (e.message ?? '');
+    // castlabs-evs prints its errors to stdout, Python's own (a missing module) to stderr: read both.
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+    const text = `${e.stdout?.toString() ?? ''}\n${e.stderr?.toString() ?? ''}`.trim() || (e.message ?? '');
     if (/development only/i.test(text)) vmp = { ...vmp, status: 'fail', details: 'Development-only signature: sign with castlabs_evs.vmp sign-pkg (see docs/DEVELOPMENT.md).' };
+    // Anything but a missing castlabs-evs or Python is a real failure (an invalid or expired signature).
+    else if (!/No module named|No suitable Python|not found/i.test(text)) vmp = { ...vmp, status: 'fail', details: text.split(/\r?\n/).pop() ?? text };
   }
   record(vmp);
 
